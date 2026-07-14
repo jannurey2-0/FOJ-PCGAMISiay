@@ -1,0 +1,42 @@
+ROADMAP & NEXT STEPS TO MAKE FOJ-PCGAMI SIAY FULLY FUNCTIONAL
+============================================================
+
+Moving this high-fidelity prototype into a production-ready, fully functional 
+church platform requires the following architectural additions:
+
+1. AUTHENTICATION & SECURITY
+----------------------------
+* Switch from mock states to a secure Identity Provider (e.g., Supabase Auth, Firebase Auth, or Clerk).
+* Implement secure server-side JWT verification for API routes.
+* Define database Row Level Security (RLS) rules so that only users with the role 'Pastor / Facilitator / Admin' can approve/delete items or read full analytics.
+
+2. BACKEND & PERSISTENT DATABASE
+---------------------------------
+* Provision a relational database (like PostgreSQL via Supabase) or NoSQL database (like Firestore) to persist:
+  - User profile details & roles.
+  - Thanksgiving RSVP lists and headcount.
+  - Chat messages and user reaction counts.
+  - Photo records and Gratitude Wall entries.
+* Replace the local React arrays in `App.tsx` with fetch calls/mutations (such as TanStack Query / Axios).
+
+3. REAL-TIME COMMUNITY CHAT
+----------------------------
+* Replace the simulated local messaging with a real-time transport layer.
+* Use WebSockets (e.g., Socket.io, Firebase Realtime Database, or Supabase Realtime Channels).
+* Implement push notifications for critical ministry mentions (e.g., tagging @media-team or @worship-team).
+
+4. CLOUD MEDIA STORAGE
+-----------------------
+* The current photo uploader uses object URLs (`URL.createObjectURL`), which only exist in local memory.
+* Set up a cloud object storage bucket (e.g., AWS S3, Cloudinary, or Supabase Storage).
+* Implement file verification (mime-types, file size caps) before uploading to protect the cloud infrastructure.
+
+5. CONTENT MODERATION PIPELINE
+-------------------------------
+* Ensure Gratitude Wall notes and Photo submissions are stored with an `approved: false` status by default.
+* Implement a server-side web-socket notification or dashboard badge for admins when new moderation tasks arrive.
+
+6. DEPLOYMENT & CI/CD
+---------------------
+* Deploy the frontend build folder (`/dist`) to hosting providers like Vercel, Netlify, or AWS Amplify.
+* Connect a custom domain name (e.g., `foj-pcgami-siay.org`).
