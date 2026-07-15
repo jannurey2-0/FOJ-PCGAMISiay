@@ -15,8 +15,24 @@ import {
   BookOpen,
   Flame
 } from 'lucide-react';
+import { supabase } from './lib/supabaseClient';
 
 // Types
+interface UserProfile {
+  id: string;
+  name: string;
+  role: string;
+  approved: boolean;
+  email?: string;
+}
+
+interface HeroPhoto {
+  id: string;
+  url: string;
+  caption?: string;
+  display_order: number;
+}
+
 interface RSVP {
   id: string;
   name: string;
@@ -135,7 +151,7 @@ const INITIAL_CHAT: ChatMessage[] = [
     id: 'c1',
     channel: '#general-fellowship',
     sender: 'Pastor Thomas',
-    senderRole: 'Pastor / Facilitator / Admin',
+    senderRole: 'Pastor',
     text: 'Welcome to our digital fellowship workspace! Looking forward to our joint planning for the Thanksgiving Celebration.',
     timestamp: '10:15 AM'
   },
@@ -217,12 +233,138 @@ export default function App() {
   const [rsvpNote, setRsvpNote] = useState('');
   
   // Auth State
-  const [currentUser, setCurrentUser] = useState<{ name: string; role: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authName, setAuthName] = useState('');
   const [authEmail, setAuthEmail] = useState('');
   const [authRole, setAuthRole] = useState('Church Member');
   const [authPassword, setAuthPassword] = useState('');
+
+  // Real DB Auth States
+  const [profilesList, setProfilesList] = useState<UserProfile[]>([]);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Hero Slideshow States
+  const [heroPhotos, setHeroPhotos] = useState<HeroPhoto[]>([]);
+  const [currentHeroIndex, setCurrentHeroIndex] = useState(0);
+  const [newHeroUrl, setNewHeroUrl] = useState('');
+  const [newHeroCaption, setNewHeroCaption] = useState('');
+  const [newHeroOrder, setNewHeroOrder] = useState(0);
+
+  // Fetch hero photos
+  const fetchHeroPhotos = React.useCallback(async () => {
+    const { data, error } = await supabase
+      .from('hero_photos')
+      .select('*')
+      .order('display_order', { ascending: true });
+    if (!error && data) {
+      setHeroPhotos(data);
+    }
+  }, []);
+
+  // Fetch hero photos on mount
+  useEffect(() => {
+    fetchHeroPhotos();
+  }, [fetchHeroPhotos]);
+
+  // Slideshow interval logic
+  useEffect(() => {
+    if (heroPhotos.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentHeroIndex((prevIndex) => (prevIndex + 1) % heroPhotos.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [heroPhotos]);
+
+  // Monitor Auth State and fetch profile
+  useEffect(() => {
+    let active = true;
+
+    // Initial session check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!active) return;
+      if (session?.user) {
+        fetchUserProfile(session.user.id, session.user.email || '');
+      } else {
+        setCurrentUser(null);
+        setAuthLoading(false);
+      }
+    });
+
+    // Listen to changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!active) return;
+      if (session?.user) {
+        fetchUserProfile(session.user.id, session.user.email || '');
+      } else {
+        setCurrentUser(null);
+        setAuthLoading(false);
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const fetchUserProfile = async (userId: string, email: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        setCurrentUser(null);
+        setAuthLoading(false);
+        return;
+      }
+
+      if (data) {
+        if (!data.approved) {
+          alert('Your account is pending approval by the Admin.');
+          await supabase.auth.signOut();
+          setCurrentUser(null);
+        } else {
+          setCurrentUser({
+            id: data.id,
+            name: data.name,
+            role: data.role,
+            approved: data.approved,
+            email: email
+          });
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Fetch all profiles for Admin
+  const fetchProfiles = React.useCallback(async () => {
+    if (currentUser?.role === 'Admin') {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        setProfilesList(data);
+      }
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser?.role === 'Admin') {
+      fetchProfiles();
+    } else {
+      setProfilesList([]);
+    }
+  }, [currentUser, fetchProfiles]);
   
   // Chat state
   const [activeChannel, setActiveChannel] = useState('#general-fellowship');
@@ -330,36 +472,43 @@ export default function App() {
     }
   };
 
-  // Mock Register/Login
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  // Supabase Register/Login
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authMode === 'register') {
       if (!authName || !authEmail || !authPassword) return;
-      setCurrentUser({
-        name: authName,
-        role: authRole
+      
+      const { error } = await supabase.auth.signUp({
+        email: authEmail,
+        password: authPassword,
+        options: {
+          data: {
+            name: authName,
+            role: authRole,
+          }
+        }
       });
+
+      if (error) {
+        alert(error.message);
+      } else {
+        if (authEmail === 'admin@pcgami.org') {
+          alert('Registration successful! Auto-approved as Admin. You can now log in.');
+        } else {
+          alert('Registration successful! Your account is pending admin approval.');
+        }
+        setAuthMode('login');
+      }
     } else {
       if (!authEmail || !authPassword) return;
-      // Pre-fill roles based on emails for easy testing
-      let role = 'Church Member';
-      let name = authEmail.split('@')[0];
-      name = name.charAt(0).toUpperCase() + name.slice(1);
-      
-      if (authEmail.includes('pastor') || authEmail.includes('admin')) {
-        role = 'Pastor / Facilitator / Admin';
-      } else if (authEmail.includes('worship') || authEmail.includes('music')) {
-        role = 'Musicians / Worship Team';
-      } else if (authEmail.includes('media') || authEmail.includes('tech')) {
-        role = 'Media Team';
-      } else if (authEmail.includes('youth') || authEmail.includes('leader')) {
-        role = 'Youth Leaders';
-      }
-      
-      setCurrentUser({
-        name: name,
-        role: role
+      const { error } = await supabase.auth.signInWithPassword({
+        email: authEmail,
+        password: authPassword
       });
+
+      if (error) {
+        alert(error.message);
+      }
     }
     // Clear forms
     setAuthName('');
@@ -521,12 +670,31 @@ export default function App() {
         {activeTab === 'home' && (
           <div className="animate-fadeIn">
             {/* Hero / Vision Section */}
-            <div className="relative bg-church-wood text-church-bg py-20 px-4 sm:px-6 lg:px-8 text-center overflow-hidden">
-              {/* Decorative lighting glow backdrops */}
-              <div className="absolute top-0 left-1/4 w-96 h-96 bg-church-gold/10 rounded-full blur-3xl -translate-y-1/2 pointer-events-none"></div>
-              <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-church-gold/10 rounded-full blur-3xl translate-y-1/2 pointer-events-none"></div>
+            <div className="relative text-church-bg py-20 px-4 sm:px-6 lg:px-8 text-center overflow-hidden min-h-[450px] flex items-center justify-center">
+              {/* Background Slideshow */}
+              {heroPhotos.length > 0 ? (
+                <div className="absolute inset-0 z-0">
+                  {heroPhotos.map((photo, index) => (
+                    <div
+                      key={photo.id}
+                      className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out ${
+                        index === currentHeroIndex ? 'opacity-100' : 'opacity-0'
+                      }`}
+                      style={{ backgroundImage: `url(${photo.url})` }}
+                    />
+                  ))}
+                  {/* Overlay to ensure text readability */}
+                  <div className="absolute inset-0 bg-black/60 z-10"></div>
+                </div>
+              ) : (
+                <div className="absolute inset-0 bg-church-wood z-0">
+                  {/* Decorative lighting glow backdrops */}
+                  <div className="absolute top-0 left-1/4 w-96 h-96 bg-church-gold/10 rounded-full blur-3xl -translate-y-1/2 pointer-events-none"></div>
+                  <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-church-gold/10 rounded-full blur-3xl translate-y-1/2 pointer-events-none"></div>
+                </div>
+              )}
               
-              <div className="max-w-4xl mx-auto relative z-10 space-y-6">
+              <div className="max-w-4xl mx-auto relative z-20 space-y-6">
                 <span className="text-xs uppercase tracking-widest text-church-gold font-bold bg-church-gold/10 px-3 py-1 rounded-full border border-church-gold/20">
                   Welcome to FOJ-PCGAMI Siay
                 </span>
@@ -735,9 +903,11 @@ export default function App() {
         {/* ================= TAB 3: SECURE COMMUNITY PORTAL ================= */}
         {activeTab === 'portal' && (
           <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8 animate-fadeIn">
-            
-            {/* 3A: If Not Logged In -> Show Login/Register */}
-            {!currentUser ? (
+            {authLoading ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-church-gold"></div>
+              </div>
+            ) : !currentUser ? (
               <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl border border-church-creamDark/80 overflow-hidden transform transition-all">
                 <div className="bg-church-wood p-8 text-center relative">
                   <div className="absolute inset-0 bg-gradient-to-br from-church-wood via-church-wood to-church-charcoal"></div>
@@ -807,11 +977,12 @@ export default function App() {
                           onChange={(e) => setAuthRole(e.target.value)}
                           className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold bg-white"
                         >
-                          <option value="Pastor / Facilitator / Admin">Pastor / Facilitator / Admin</option>
-                          <option value="Musicians / Worship Team">Musicians / Worship Team</option>
-                          <option value="Media Team">Media Team</option>
-                          <option value="Youth Leaders">Youth Leaders</option>
+                          <option value="Admin">Admin</option>
+                          <option value="Pastor">Pastor</option>
+                          <option value="Church Leader">Church Leader</option>
+                          <option value="Youth Leader">Youth Leader</option>
                           <option value="Church Member">Church Member</option>
+                          <option value="Young People">Young People</option>
                         </select>
                       </div>
                     )}
@@ -871,7 +1042,7 @@ export default function App() {
                   </div>
 
                   <button 
-                    onClick={() => setCurrentUser(null)}
+                    onClick={() => supabase.auth.signOut()}
                     className="flex items-center space-x-1.5 px-4 py-2 border border-church-creamDark text-church-charcoal/80 hover:text-red-600 hover:bg-red-50 rounded-lg text-sm transition-all"
                   >
                     <LogOut className="w-4 h-4" />
@@ -892,29 +1063,34 @@ export default function App() {
                         <h3 className="font-serif text-2xl font-bold text-church-goldLight">Ministry Hub Notes</h3>
                         
                         {/* Custom message based on Role */}
-                        {currentUser.role === 'Pastor / Facilitator / Admin' && (
+                        {currentUser.role === 'Admin' && (
                           <p className="text-sm text-white/95 leading-relaxed">
-                            Hello Pastor. You have full oversight of the platform. Below, you can access the tally sheet for RSVPs, volunteer arrangements, and moderate gratitude wall submissions before they go public.
+                            Hello Administrator. You have full system oversight. You can approve or revoke member access, modify user roles, and review gratitude notes.
                           </p>
                         )}
-                        {currentUser.role === 'Musicians / Worship Team' && (
+                        {currentUser.role === 'Pastor' && (
                           <p className="text-sm text-white/95 leading-relaxed">
-                            Praise Team Member: We have updated rehearsal timings in the #worship-team channel. Please check the worship lineup for the upcoming Sunday Service.
+                            Hello Pastor. Welcome back. You have access to thanksgiving RSVP tally sheets, volunteer arrangements, and gratitude notes.
                           </p>
                         )}
-                        {currentUser.role === 'Media Team' && (
+                        {currentUser.role === 'Church Leader' && (
                           <p className="text-sm text-white/95 leading-relaxed">
-                            Tech Crew Member: Please coordinate with the worship leaders regarding audio settings. Check the #media-team channel for the service script.
+                            Greetings, Church Leader. You can view schedules, join fellowship channels, and share guidelines for ministry work.
                           </p>
                         )}
-                        {currentUser.role === 'Youth Leaders' && (
+                        {currentUser.role === 'Youth Leader' && (
                           <p className="text-sm text-white/95 leading-relaxed">
-                            Youth Team: The bonfire list and study resources have been shared. Let us continue to mentor the kids with love and patience.
+                            Youth Team Leader: Let us continue to guide and mentor our youth with passion. Coordinate bonfire nights and fellowships in the chat channels.
+                          </p>
+                        )}
+                        {currentUser.role === 'Young People' && (
+                          <p className="text-sm text-white/95 leading-relaxed">
+                            Hey! Glad to have you in the fellowship. Feel free to chat with your friends and join the Youth Activities.
                           </p>
                         )}
                         {currentUser.role === 'Church Member' && (
                           <p className="text-sm text-white/95 leading-relaxed">
-                            Dear Church Member: Thank you for being a part of the Grace Community. You can upload photo memories to the gallery and chat in our global fellowship channels.
+                            Dear Church Member: Thank you for being a part of the fellowship. You can upload photo memories to the gallery and participate in fellowship channels.
                           </p>
                         )}
                       </div>
@@ -1075,8 +1251,216 @@ export default function App() {
                   {/* Right Column: Ministry Calendar & Admin Controls */}
                   <div className="space-y-8">
                     
+                    {/* Admin User Approval and Moderation Panel */}
+                    {currentUser.role === 'Admin' && (
+                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
+                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
+                          <Users className="w-6 h-6 text-church-gold" />
+                          <h3 className="font-serif text-2xl font-bold">User Moderation</h3>
+                        </div>
+
+                        <div className="space-y-4">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Pending Approvals ({profilesList.filter(p => !p.approved).length})</h4>
+                          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                            {profilesList.filter(p => !p.approved).length === 0 ? (
+                              <p className="text-xs text-church-charcoal/50 text-center py-2">No pending user registrations.</p>
+                            ) : (
+                              profilesList.filter(p => !p.approved).map((profile) => (
+                                <div key={profile.id} className="bg-church-bg p-3 rounded-lg border border-church-creamDark space-y-2 text-xs">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <span className="font-bold text-church-wood block">{profile.name}</span>
+                                      <span className="text-[10px] text-church-charcoal/50 block">Requested: {profile.role}</span>
+                                    </div>
+                                    <div className="flex space-x-1.5">
+                                      <button 
+                                        onClick={async () => {
+                                          const { error } = await supabase.from('profiles').delete().eq('id', profile.id);
+                                          if (error) alert(error.message);
+                                          else fetchProfiles();
+                                        }}
+                                        className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded"
+                                        title="Deny / Delete"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button 
+                                        onClick={async () => {
+                                          const { error } = await supabase.from('profiles').update({ approved: true }).eq('id', profile.id);
+                                          if (error) alert(error.message);
+                                          else fetchProfiles();
+                                        }}
+                                        className="p-1 bg-green-50 text-green-600 hover:bg-green-100 rounded"
+                                        title="Approve User"
+                                      >
+                                        <Check className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 pt-2 border-t border-church-creamDark">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">All Approved Members ({profilesList.filter(p => p.approved).length})</h4>
+                          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                            {profilesList.filter(p => p.approved).map((profile) => (
+                              <div key={profile.id} className="flex justify-between items-center text-xs p-2 bg-church-bg/50 rounded-lg">
+                                <div>
+                                  <span className="font-semibold text-church-wood block">{profile.name}</span>
+                                  <span className="text-[10px] text-church-charcoal/50">{profile.role}</span>
+                                </div>
+                                {profile.email !== 'admin@pcgami.org' && (
+                                  <div className="flex space-x-1 items-center">
+                                    <select
+                                      value={profile.role}
+                                      onChange={async (e) => {
+                                        const newRole = e.target.value;
+                                        const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', profile.id);
+                                        if (error) alert(error.message);
+                                        else fetchProfiles();
+                                      }}
+                                      className="px-1.5 py-0.5 border border-church-creamDark rounded text-[10px] bg-white text-church-charcoal focus:outline-none"
+                                    >
+                                      <option value="Admin">Admin</option>
+                                      <option value="Pastor">Pastor</option>
+                                      <option value="Church Leader">Church Leader</option>
+                                      <option value="Youth Leader">Youth Leader</option>
+                                      <option value="Church Member">Church Member</option>
+                                      <option value="Young People">Young People</option>
+                                    </select>
+                                    <button
+                                      onClick={async () => {
+                                        const { error } = await supabase.from('profiles').update({ approved: false }).eq('id', profile.id);
+                                        if (error) alert(error.message);
+                                        else fetchProfiles();
+                                      }}
+                                      className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                      title="Revoke Access"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Admin Hero Slideshow Management Panel */}
+                    {currentUser.role === 'Admin' && (
+                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
+                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
+                          <Upload className="w-6 h-6 text-church-gold" />
+                          <h3 className="font-serif text-2xl font-bold">Hero Slideshow</h3>
+                        </div>
+
+                        {/* Add new slide form */}
+                        <form
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            if (!newHeroUrl.trim()) return;
+
+                            const { error } = await supabase.from('hero_photos').insert([
+                              {
+                                url: newHeroUrl,
+                                caption: newHeroCaption,
+                                display_order: newHeroOrder
+                              }
+                            ]);
+
+                            if (error) {
+                              alert(error.message);
+                            } else {
+                              setNewHeroUrl('');
+                              setNewHeroCaption('');
+                              setNewHeroOrder(0);
+                              fetchHeroPhotos();
+                            }
+                          }}
+                          className="space-y-3"
+                        >
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Add New Slide</h4>
+                          <div>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Image URL (e.g. https://images.unsplash.com/...)"
+                              value={newHeroUrl}
+                              onChange={(e) => setNewHeroUrl(e.target.value)}
+                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white"
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <input
+                              type="text"
+                              placeholder="Caption"
+                              value={newHeroCaption}
+                              onChange={(e) => setNewHeroCaption(e.target.value)}
+                              className="col-span-2 px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white"
+                            />
+                            <input
+                              type="number"
+                              placeholder="Order"
+                              value={newHeroOrder}
+                              onChange={(e) => setNewHeroOrder(parseInt(e.target.value) || 0)}
+                              className="px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white"
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            className="w-full py-2 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded text-xs transition-all shadow"
+                          >
+                            Add Slide Image
+                          </button>
+                        </form>
+
+                        {/* Current slides list */}
+                        <div className="space-y-4 pt-4 border-t border-church-creamDark">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Active Slides ({heroPhotos.length})</h4>
+                          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                            {heroPhotos.length === 0 ? (
+                              <p className="text-xs text-church-charcoal/50 text-center py-2">No custom slideshow images. Falling back to default cover.</p>
+                            ) : (
+                              heroPhotos.map((photo) => (
+                                <div key={photo.id} className="flex items-center space-x-3 p-2 bg-church-bg/50 rounded-lg">
+                                  <img
+                                    src={photo.url}
+                                    alt={photo.caption || 'Slide'}
+                                    className="w-12 h-12 object-cover rounded border border-church-creamDark"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1515162305285-0293e4767cc2?q=80&w=800';
+                                    }}
+                                  />
+                                  <div className="flex-grow min-w-0">
+                                    <span className="font-semibold text-xs text-church-wood block truncate">{photo.caption || 'No Caption'}</span>
+                                    <span className="text-[10px] text-church-charcoal/50 block">Order: {photo.display_order}</span>
+                                  </div>
+                                  <button
+                                    onClick={async () => {
+                                      const { error } = await supabase.from('hero_photos').delete().eq('id', photo.id);
+                                      if (error) alert(error.message);
+                                      else fetchHeroPhotos();
+                                    }}
+                                    className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded"
+                                    title="Delete Slide"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Facilitator Admin Dashboard Button and Tally */}
-                    {currentUser.role === 'Pastor / Facilitator / Admin' && (
+                    {(currentUser.role === 'Admin' || currentUser.role === 'Pastor') && (
                       <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-gold shadow-md space-y-6">
                         <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
                           <Shield className="w-6 h-6 text-church-gold" />
