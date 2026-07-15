@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Calendar, 
-  Clock, 
-  Upload, 
-  Users, 
-  LogOut, 
-  Send, 
-  Check, 
-  X, 
-  ChevronRight, 
-  Heart, 
+import {
+  Calendar,
+  Clock,
+  Upload,
+  Users,
+  LogOut,
+  Send,
+  Check,
+  X,
+  ChevronRight,
+  Heart,
   Info,
   Shield,
   BookOpen,
   Flame
 } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
+import { Analytics } from "@vercel/analytics/react"
 
 // Types
 interface UserProfile {
@@ -214,24 +215,24 @@ export default function App() {
   // Navigation & Page State
   const [activeTab, setActiveTab] = useState<'home' | 'gallery' | 'portal'>('home');
   const [urlFamilyName, setUrlFamilyName] = useState<string | null>(null);
-  
+
   // Modals & Lights
   const [showInvitationModal, setShowInvitationModal] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
-  
+
   // Data States
   const [rsvps, setRsvps] = useState<RSVP[]>(INITIAL_RSVPS);
   const [gratitudeNotes, setGratitudeNotes] = useState<GratitudeNote[]>(INITIAL_GRATITUDE_NOTES);
   const [photos, setPhotos] = useState<Photo[]>(INITIAL_PHOTOS);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT);
-  
+
   // Form States
   const [rsvpName, setRsvpName] = useState('');
   const [rsvpAdults, setRsvpAdults] = useState(1);
   const [rsvpKids, setRsvpKids] = useState(0);
   const [rsvpVolunteer, setRsvpVolunteer] = useState<string[]>([]);
   const [rsvpNote, setRsvpNote] = useState('');
-  
+
   // Auth State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -365,18 +366,18 @@ export default function App() {
       setProfilesList([]);
     }
   }, [currentUser, fetchProfiles]);
-  
+
   // Chat state
   const [activeChannel, setActiveChannel] = useState('#general-fellowship');
   const [newMessage, setNewMessage] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
-  
+
   // Image Upload state
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadCategory, setUploadCategory] = useState('Services');
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  
+
   // Parse URL parameter on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -400,11 +401,11 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   useEffect(() => {
     const eventDate = new Date('November 26, 2026 10:00:00').getTime();
-    
+
     const interval = setInterval(() => {
       const now = new Date().getTime();
       const distance = eventDate - now;
-      
+
       if (distance < 0) {
         clearInterval(interval);
       } else {
@@ -415,7 +416,7 @@ export default function App() {
         setTimeLeft({ days, hours, minutes, seconds });
       }
     }, 1000);
-    
+
     return () => clearInterval(interval);
   }, []);
 
@@ -459,7 +460,7 @@ export default function App() {
     setRsvpVolunteer([]);
     setRsvpNote('');
     setShowInvitationModal(false);
-    
+
     alert('Thank you! Your RSVP has been submitted and is sent to the volunteer planning teams.');
   };
 
@@ -477,7 +478,7 @@ export default function App() {
     e.preventDefault();
     if (authMode === 'register') {
       if (!authName || !authEmail || !authPassword) return;
-      
+
       const { error } = await supabase.auth.signUp({
         email: authEmail,
         password: authPassword,
@@ -606,7 +607,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-church-bg text-church-charcoal flex flex-col font-sans selection:bg-church-gold/30">
-      
+
       {/* Warm Golden Glow Top Bar Accent */}
       <div className="h-1.5 bg-gradient-to-r from-church-wood via-church-gold to-church-wood w-full"></div>
 
@@ -625,33 +626,30 @@ export default function App() {
 
           {/* Navigation Tabs */}
           <nav className="flex space-x-1 sm:space-x-4">
-            <button 
+            <button
               onClick={() => setActiveTab('home')}
-              className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-300 ${
-                activeTab === 'home' 
-                  ? 'bg-church-wood text-church-bg shadow-sm' 
+              className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-300 ${activeTab === 'home'
+                  ? 'bg-church-wood text-church-bg shadow-sm'
                   : 'text-church-charcoal/80 hover:text-church-wood hover:bg-church-creamDark/50'
-              }`}
+                }`}
             >
               Home
             </button>
-            <button 
+            <button
               onClick={() => setActiveTab('gallery')}
-              className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-300 ${
-                activeTab === 'gallery' 
-                  ? 'bg-church-wood text-church-bg shadow-sm' 
+              className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-300 ${activeTab === 'gallery'
+                  ? 'bg-church-wood text-church-bg shadow-sm'
                   : 'text-church-charcoal/80 hover:text-church-wood hover:bg-church-creamDark/50'
-              }`}
+                }`}
             >
               Gallery
             </button>
-            <button 
+            <button
               onClick={() => setActiveTab('portal')}
-              className={`px-4 py-2 rounded-full font-medium text-sm flex items-center space-x-1.5 transition-all duration-300 ${
-                activeTab === 'portal' 
-                  ? 'bg-church-wood text-church-bg shadow-sm' 
+              className={`px-4 py-2 rounded-full font-medium text-sm flex items-center space-x-1.5 transition-all duration-300 ${activeTab === 'portal'
+                  ? 'bg-church-wood text-church-bg shadow-sm'
                   : 'text-church-charcoal/80 hover:text-church-wood hover:bg-church-creamDark/50'
-              }`}
+                }`}
             >
               <Users className="w-4 h-4" />
               <span>Portal</span>
@@ -665,7 +663,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-grow">
-        
+
         {/* ================= TAB 1: HOME PAGE ================= */}
         {activeTab === 'home' && (
           <div className="animate-fadeIn">
@@ -677,9 +675,8 @@ export default function App() {
                   {heroPhotos.map((photo, index) => (
                     <div
                       key={photo.id}
-                      className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out ${
-                        index === currentHeroIndex ? 'opacity-100' : 'opacity-0'
-                      }`}
+                      className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out ${index === currentHeroIndex ? 'opacity-100' : 'opacity-0'
+                        }`}
                       style={{ backgroundImage: `url(${photo.url})` }}
                     />
                   ))}
@@ -693,25 +690,25 @@ export default function App() {
                   <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-church-gold/10 rounded-full blur-3xl translate-y-1/2 pointer-events-none"></div>
                 </div>
               )}
-              
+
               <div className="max-w-4xl mx-auto relative z-20 space-y-6">
                 <span className="text-xs uppercase tracking-widest text-church-gold font-bold bg-church-gold/10 px-3 py-1 rounded-full border border-church-gold/20">
                   Welcome to FOJ-PCGAMI Siay
                 </span>
                 <h1 className="font-serif text-4xl sm:text-6xl font-bold tracking-tight text-white leading-tight">
-                  A place to belong, grow, <br/>and share God's warm love.
+                  A place to belong, grow, <br />and share God's warm love.
                 </h1>
                 <p className="text-church-goldLight text-lg sm:text-xl font-light max-w-2xl mx-auto leading-relaxed">
                   "Let us hold fast the confession of our hope without wavering, for He who promised is faithful. And let us consider how to stir up one another to love and good works." — Hebrews 10:23-24
                 </p>
                 <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-4">
-                  <button 
+                  <button
                     onClick={() => setShowInvitationModal(true)}
                     className="w-full sm:w-auto px-8 py-3.5 bg-church-gold hover:bg-church-goldDark text-church-wood hover:text-white font-bold rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
                   >
                     Thanksgiving Celebration RSVP
                   </button>
-                  <button 
+                  <button
                     onClick={() => setActiveTab('portal')}
                     className="w-full sm:w-auto px-8 py-3.5 bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40 text-white font-semibold rounded-lg transition-all duration-300"
                   >
@@ -802,7 +799,7 @@ export default function App() {
                     <h2 className="font-serif text-3xl sm:text-4xl font-bold text-church-wood">Capturing Blessed Memories</h2>
                     <p className="text-church-charcoal/70 mt-2">Moments of joy, prayer, and serving together.</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setActiveTab('gallery')}
                     className="text-church-goldDark hover:text-church-wood font-semibold text-sm flex items-center space-x-1 hover:underline mt-4 sm:mt-0 transition-colors"
                   >
@@ -814,14 +811,14 @@ export default function App() {
                 {/* Masonry Grid Preview */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {photos.slice(0, 3).map((photo) => (
-                    <div 
+                    <div
                       key={photo.id}
                       onClick={() => setSelectedPhoto(photo)}
                       className="group cursor-pointer overflow-hidden rounded-2xl bg-white shadow-sm border border-church-creamDark transition-all duration-300 transform hover:-translate-y-1 hover:shadow-md"
                     >
                       <div className="relative overflow-hidden aspect-[4/3]">
-                        <img 
-                          src={photo.url} 
+                        <img
+                          src={photo.url}
                           alt={photo.title}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
@@ -852,7 +849,7 @@ export default function App() {
               {/* Upload Access & Filters */}
               <div className="flex items-center gap-3">
                 {currentUser ? (
-                  <button 
+                  <button
                     onClick={() => setShowUploadModal(true)}
                     className="flex items-center space-x-2 px-5 py-2.5 bg-church-wood hover:bg-church-gold hover:text-church-wood text-white font-semibold rounded-lg shadow-sm transition-all duration-300"
                   >
@@ -871,14 +868,14 @@ export default function App() {
             {/* Masonry Layout */}
             <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 space-y-6">
               {photos.map((photo) => (
-                <div 
+                <div
                   key={photo.id}
                   onClick={() => setSelectedPhoto(photo)}
                   className="break-inside-avoid bg-white rounded-2xl overflow-hidden shadow-sm border border-church-creamDark cursor-pointer group hover:shadow-md transition-all duration-300 transform hover:-translate-y-1"
                 >
                   <div className="relative overflow-hidden">
-                    <img 
-                      src={photo.url} 
+                    <img
+                      src={photo.url}
                       alt={photo.title}
                       className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-105"
                     />
@@ -920,23 +917,21 @@ export default function App() {
                 <div className="p-8">
                   {/* Mode switcher */}
                   <div className="flex bg-church-creamDark/50 rounded-lg p-1 mb-6">
-                    <button 
+                    <button
                       onClick={() => setAuthMode('login')}
-                      className={`flex-1 py-2 text-center text-sm font-semibold rounded-md transition-all ${
-                        authMode === 'login' 
-                          ? 'bg-white text-church-wood shadow-sm' 
+                      className={`flex-1 py-2 text-center text-sm font-semibold rounded-md transition-all ${authMode === 'login'
+                          ? 'bg-white text-church-wood shadow-sm'
                           : 'text-church-charcoal/60 hover:text-church-wood'
-                      }`}
+                        }`}
                     >
                       Login
                     </button>
-                    <button 
+                    <button
                       onClick={() => setAuthMode('register')}
-                      className={`flex-1 py-2 text-center text-sm font-semibold rounded-md transition-all ${
-                        authMode === 'register' 
-                          ? 'bg-white text-church-wood shadow-sm' 
+                      className={`flex-1 py-2 text-center text-sm font-semibold rounded-md transition-all ${authMode === 'register'
+                          ? 'bg-white text-church-wood shadow-sm'
                           : 'text-church-charcoal/60 hover:text-church-wood'
-                      }`}
+                        }`}
                     >
                       Register
                     </button>
@@ -946,12 +941,12 @@ export default function App() {
                     {authMode === 'register' && (
                       <div>
                         <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Full Name</label>
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           required
                           value={authName}
                           onChange={(e) => setAuthName(e.target.value)}
-                          placeholder="e.g. Samuel Bennett" 
+                          placeholder="e.g. Samuel Bennett"
                           className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold"
                         />
                       </div>
@@ -959,12 +954,12 @@ export default function App() {
 
                     <div>
                       <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Email Address</label>
-                      <input 
-                        type="email" 
+                      <input
+                        type="email"
                         required
                         value={authEmail}
                         onChange={(e) => setAuthEmail(e.target.value)}
-                        placeholder="e.g. samuel@grace.com" 
+                        placeholder="e.g. samuel@grace.com"
                         className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold"
                       />
                     </div>
@@ -972,7 +967,7 @@ export default function App() {
                     {authMode === 'register' && (
                       <div>
                         <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Ministry Role / Title</label>
-                        <select 
+                        <select
                           value={authRole}
                           onChange={(e) => setAuthRole(e.target.value)}
                           className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold bg-white"
@@ -989,17 +984,17 @@ export default function App() {
 
                     <div>
                       <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Password</label>
-                      <input 
-                        type="password" 
+                      <input
+                        type="password"
                         required
                         value={authPassword}
                         onChange={(e) => setAuthPassword(e.target.value)}
-                        placeholder="••••••••" 
+                        placeholder="••••••••"
                         className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold"
                       />
                     </div>
 
-                    <button 
+                    <button
                       type="submit"
                       className="w-full py-3 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded-lg shadow-md transition-all duration-300 mt-2"
                     >
@@ -1010,7 +1005,7 @@ export default function App() {
                   {/* Help box */}
                   <div className="mt-6 p-4 bg-church-creamDark/40 rounded-xl border border-church-gold/20 text-xs text-church-charcoal/80 space-y-1">
                     <span className="font-bold flex items-center text-church-wood">
-                      <Shield className="w-3.5 h-3.5 mr-1 text-church-goldDark" /> 
+                      <Shield className="w-3.5 h-3.5 mr-1 text-church-goldDark" />
                       Prototype Helper Tips:
                     </span>
                     <p>• To test **Pastor / Admin** view, log in with an email containing `pastor` or `admin`.</p>
@@ -1019,10 +1014,10 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              
+
               // 3B: If Logged In -> Show Portal Layout
               <div className="space-y-8">
-                
+
                 {/* User Greeting & Header */}
                 <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-church-creamDark flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                   <div className="flex items-center space-x-4">
@@ -1041,7 +1036,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <button 
+                  <button
                     onClick={() => supabase.auth.signOut()}
                     className="flex items-center space-x-1.5 px-4 py-2 border border-church-creamDark text-church-charcoal/80 hover:text-red-600 hover:bg-red-50 rounded-lg text-sm transition-all"
                   >
@@ -1052,16 +1047,16 @@ export default function App() {
 
                 {/* Dashboard Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  
+
                   {/* Left & Middle Column: Welcome Message, Announcements & Chat */}
                   <div className="lg:col-span-2 space-y-8">
-                    
+
                     {/* Welcome Notice Card */}
                     <div className="bg-gradient-to-br from-church-wood to-church-charcoal text-white p-8 rounded-2xl shadow-md relative overflow-hidden">
                       <div className="absolute top-0 right-0 w-48 h-48 bg-church-gold/15 rounded-full blur-2xl pointer-events-none"></div>
                       <div className="relative z-10 space-y-4">
                         <h3 className="font-serif text-2xl font-bold text-church-goldLight">Ministry Hub Notes</h3>
-                        
+
                         {/* Custom message based on Role */}
                         {currentUser.role === 'Admin' && (
                           <p className="text-sm text-white/95 leading-relaxed">
@@ -1105,7 +1100,7 @@ export default function App() {
                         </h3>
                         <span className="text-xs uppercase tracking-widest text-church-gold font-bold">Latest Updates</span>
                       </div>
-                      
+
                       <div className="space-y-4">
                         <div className="p-4 bg-church-creamDark/20 rounded-xl border-l-4 border-church-gold space-y-1.5">
                           <div className="flex items-center justify-between">
@@ -1150,11 +1145,10 @@ export default function App() {
                               <button
                                 key={chan}
                                 onClick={() => setActiveChannel(chan)}
-                                className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-all ${
-                                  activeChannel === chan 
-                                    ? 'bg-church-wood text-white shadow-sm' 
+                                className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-all ${activeChannel === chan
+                                    ? 'bg-church-wood text-white shadow-sm'
                                     : 'text-church-charcoal hover:bg-church-creamDark'
-                                }`}
+                                  }`}
                               >
                                 {chan}
                               </button>
@@ -1174,15 +1168,14 @@ export default function App() {
                                     <span className="text-[8px] bg-church-creamDark px-1.5 py-0.5 rounded text-church-charcoal/70 uppercase scale-90">{msg.senderRole.split(' / ')[0]}</span>
                                     <span className="text-[8px] text-church-charcoal/40">{msg.timestamp}</span>
                                   </div>
-                                  
+
                                   {/* Chat bubble - coloring based on sender */}
-                                  <div className={`relative group max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm transition-all duration-200 ${
-                                    msg.isSelf 
-                                      ? 'bg-church-wood text-white rounded-tr-none' 
+                                  <div className={`relative group max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm transition-all duration-200 ${msg.isSelf
+                                      ? 'bg-church-wood text-white rounded-tr-none'
                                       : 'bg-church-creamDark/70 text-church-charcoal rounded-tl-none'
-                                  }`}>
+                                    }`}>
                                     <p className="leading-relaxed">{msg.text}</p>
-                                    
+
                                     {/* Emojis Reactions list */}
                                     {msg.emojis && msg.emojis.length > 0 && (
                                       <div className="flex items-center space-x-1 mt-1">
@@ -1193,11 +1186,10 @@ export default function App() {
                                     )}
 
                                     {/* Quick Hover Reactions */}
-                                    <div className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-church-creamDark shadow-md rounded-full px-2 py-1 flex items-center space-x-1 z-10 ${
-                                      msg.isSelf ? '-left-20' : '-right-20'
-                                    }`}>
+                                    <div className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-church-creamDark shadow-md rounded-full px-2 py-1 flex items-center space-x-1 z-10 ${msg.isSelf ? '-left-20' : '-right-20'
+                                      }`}>
                                       {['🙏', '❤️', '🙌'].map((emoji) => (
-                                        <button 
+                                        <button
                                           key={emoji}
                                           onClick={() => toggleReaction(msg.id, emoji)}
                                           className="hover:scale-125 transition-transform text-xs"
@@ -1217,7 +1209,7 @@ export default function App() {
                             {/* Quick emoji popovers */}
                             <div className="flex items-center space-x-1 border-r border-church-creamDark/60 pr-2">
                               {['🙏', '❤️', '🙌', '✨'].map((emoji) => (
-                                <button 
+                                <button
                                   key={emoji}
                                   type="button"
                                   onClick={() => addEmoji(emoji)}
@@ -1235,7 +1227,7 @@ export default function App() {
                               placeholder={`Message ${activeChannel}...`}
                               className="flex-grow px-3 py-2 bg-white rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold text-sm"
                             />
-                            
+
                             <button
                               type="submit"
                               className="p-2 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood rounded-lg transition-all"
@@ -1250,7 +1242,7 @@ export default function App() {
 
                   {/* Right Column: Ministry Calendar & Admin Controls */}
                   <div className="space-y-8">
-                    
+
                     {/* Admin User Approval and Moderation Panel */}
                     {currentUser.role === 'Admin' && (
                       <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
@@ -1273,7 +1265,7 @@ export default function App() {
                                       <span className="text-[10px] text-church-charcoal/50 block">Requested: {profile.role}</span>
                                     </div>
                                     <div className="flex space-x-1.5">
-                                      <button 
+                                      <button
                                         onClick={async () => {
                                           const { error } = await supabase.from('profiles').delete().eq('id', profile.id);
                                           if (error) alert(error.message);
@@ -1284,7 +1276,7 @@ export default function App() {
                                       >
                                         <X className="w-3.5 h-3.5" />
                                       </button>
-                                      <button 
+                                      <button
                                         onClick={async () => {
                                           const { error } = await supabase.from('profiles').update({ approved: true }).eq('id', profile.id);
                                           if (error) alert(error.message);
@@ -1514,14 +1506,14 @@ export default function App() {
                                   </div>
                                   <p className="italic text-church-charcoal/90">"{note.text}"</p>
                                   <div className="flex space-x-2 justify-end">
-                                    <button 
+                                    <button
                                       onClick={() => hideNote(note.id)}
                                       className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded"
                                       title="Reject/Hide"
                                     >
                                       <X className="w-3.5 h-3.5" />
                                     </button>
-                                    <button 
+                                    <button
                                       onClick={() => approveNote(note.id)}
                                       className="p-1 bg-green-50 text-green-600 hover:bg-green-100 rounded"
                                       title="Approve note"
@@ -1607,19 +1599,19 @@ export default function App() {
       {showInvitationModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-church-charcoal/80 backdrop-blur-sm animate-fadeIn">
           <div className="relative bg-church-bg max-w-lg w-full max-h-[calc(100vh-2rem)] rounded-2xl shadow-2xl border border-church-gold overflow-hidden flex flex-col">
-            
+
             {/* Header / Vibe Banner */}
             <div className="bg-church-wood p-8 text-center text-white relative flex-shrink-0">
-              <button 
+              <button
                 onClick={() => setShowInvitationModal(false)}
                 className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-full cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
-              
+
               <span className="text-xs uppercase tracking-widest text-church-gold font-bold">Thanksgiving Celebration Invitation</span>
               <h2 className="font-serif text-3xl font-bold mt-2">Church Thanksgiving Celebration</h2>
-              
+
               {/* Scripture Intro */}
               <div className="mt-4 border-t border-church-gold/30 pt-4 max-w-sm mx-auto">
                 <p className="text-xs italic text-church-goldLight leading-relaxed">
@@ -1630,7 +1622,7 @@ export default function App() {
 
             {/* RSVP Form Body */}
             <form onSubmit={handleRSVPSubmit} className="p-6 sm:p-8 space-y-6 overflow-y-auto flex-grow">
-              
+
               {urlFamilyName && (
                 <div className="p-3 bg-church-gold/10 border border-church-gold/30 rounded-xl text-center text-sm font-semibold text-church-wood flex items-center justify-center space-x-2">
                   <span>Welcome, {urlFamilyName}! We are blessed to invite you.</span>
@@ -1639,12 +1631,12 @@ export default function App() {
 
               <div>
                 <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Name / Family Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   value={rsvpName}
                   onChange={(e) => setRsvpName(e.target.value)}
-                  placeholder="e.g. The Jenkins Family" 
+                  placeholder="e.g. The Jenkins Family"
                   className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-sm"
                 />
               </div>
@@ -1653,8 +1645,8 @@ export default function App() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Adults Attendance</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     min="1"
                     required
                     value={rsvpAdults}
@@ -1664,8 +1656,8 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Children Attendance</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     min="0"
                     required
                     value={rsvpKids}
@@ -1681,7 +1673,7 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   {['Set-up', 'Welcoming', 'Audio-Visual', 'Clean-up'].map((team) => (
                     <label key={team} className="flex items-start space-x-2.5 p-2.5 bg-white rounded-lg border border-church-creamDark/80 hover:border-church-gold/60 cursor-pointer transition-colors">
-                      <input 
+                      <input
                         type="checkbox"
                         checked={rsvpVolunteer.includes(team)}
                         onChange={() => handleVolunteerChange(team)}
@@ -1696,7 +1688,7 @@ export default function App() {
               {/* Gratitude note */}
               <div>
                 <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Submit a Gratitude Wall Note</label>
-                <textarea 
+                <textarea
                   value={rsvpNote}
                   onChange={(e) => setRsvpNote(e.target.value)}
                   placeholder="Share a blessing or simple note of thanksgiving... (will go live on the wall upon moderation approval)"
@@ -1705,14 +1697,14 @@ export default function App() {
               </div>
 
               <div className="flex space-x-3 pt-2">
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowInvitationModal(false)}
                   className="flex-1 py-3 border border-church-creamDark text-church-charcoal font-semibold rounded-lg hover:bg-church-creamDark transition-all cursor-pointer text-sm"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   type="submit"
                   className="flex-1 py-3 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded-lg shadow-md transition-all duration-300 cursor-pointer text-sm"
                 >
@@ -1726,12 +1718,12 @@ export default function App() {
 
       {/* ================= LIGHTBOX MODAL: PHOTO VIEW ================= */}
       {selectedPhoto && (
-        <div 
+        <div
           onClick={() => setSelectedPhoto(null)}
           className="fixed inset-0 z-50 bg-black/90 flex flex-col justify-between p-4 animate-fadeIn"
         >
           <div className="flex justify-end p-4">
-            <button 
+            <button
               onClick={() => setSelectedPhoto(null)}
               className="text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full"
             >
@@ -1740,8 +1732,8 @@ export default function App() {
           </div>
 
           <div className="max-w-4xl mx-auto flex items-center justify-center flex-grow">
-            <img 
-              src={selectedPhoto.url} 
+            <img
+              src={selectedPhoto.url}
               alt={selectedPhoto.title}
               className="max-h-[75svh] max-w-full rounded-lg object-contain shadow-2xl"
               onClick={(e) => e.stopPropagation()}
@@ -1761,7 +1753,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-church-charcoal/80 backdrop-blur-sm animate-fadeIn">
           <div className="relative bg-church-bg max-w-md w-full rounded-2xl shadow-2xl border border-church-creamDark overflow-hidden">
             <div className="bg-church-wood p-6 text-center text-white relative">
-              <button 
+              <button
                 onClick={() => setShowUploadModal(false)}
                 className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-full"
               >
@@ -1772,26 +1764,26 @@ export default function App() {
             </div>
 
             <form onSubmit={handlePhotoSubmit} className="p-6 space-y-4">
-              
+
               {/* Dropzone area */}
-              <div 
+              <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={handlePhotoDrop}
                 className="border-2 border-dashed border-church-gold/40 hover:border-church-gold rounded-xl p-6 text-center bg-white/50 cursor-pointer transition-all duration-300 relative"
               >
-                <input 
-                  type="file" 
+                <input
+                  type="file"
                   accept="image/*"
                   onChange={handlePhotoSelect}
                   className="absolute inset-0 opacity-0 cursor-pointer"
                 />
-                
+
                 {uploadPreview ? (
                   <div className="space-y-2">
-                    <img 
-                      src={uploadPreview} 
-                      alt="Upload Preview" 
-                      className="max-h-36 mx-auto rounded-lg object-cover" 
+                    <img
+                      src={uploadPreview}
+                      alt="Upload Preview"
+                      className="max-h-36 mx-auto rounded-lg object-cover"
                     />
                     <p className="text-xs text-church-wood font-semibold">Change selected photo</p>
                   </div>
@@ -1806,19 +1798,19 @@ export default function App() {
 
               <div>
                 <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Photo Title</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   value={uploadTitle}
                   onChange={(e) => setUploadTitle(e.target.value)}
-                  placeholder="e.g. Fellowship Picnic" 
+                  placeholder="e.g. Fellowship Picnic"
                   className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-sm"
                 />
               </div>
 
               <div>
                 <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Category</label>
-                <select 
+                <select
                   value={uploadCategory}
                   onChange={(e) => setUploadCategory(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-sm"
@@ -1832,21 +1824,20 @@ export default function App() {
               </div>
 
               <div className="flex space-x-3 pt-2">
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowUploadModal(false)}
                   className="flex-1 py-2.5 border border-church-creamDark text-church-charcoal text-sm font-semibold rounded-lg hover:bg-church-creamDark transition-all"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   type="submit"
                   disabled={!uploadPreview || !uploadTitle}
-                  className={`flex-1 py-2.5 font-bold rounded-lg text-sm transition-all duration-300 ${
-                    uploadPreview && uploadTitle
+                  className={`flex-1 py-2.5 font-bold rounded-lg text-sm transition-all duration-300 ${uploadPreview && uploadTitle
                       ? 'bg-church-wood hover:bg-church-gold text-white hover:text-church-wood shadow-md'
                       : 'bg-church-creamDark text-church-charcoal/40 cursor-not-allowed'
-                  }`}
+                    }`}
                 >
                   Publish Photo
                 </button>
@@ -1856,6 +1847,8 @@ export default function App() {
         </div>
       )}
 
+      {/* Vercel Analytics */}
+      <Analytics />
     </div>
   );
 }
