@@ -4,11 +4,12 @@ ROADMAP & NEXT STEPS TO MAKE FOJ-PCGAMI SIAY FULLY FUNCTIONAL
 Moving this high-fidelity prototype into a production-ready, fully functional 
 church platform requires the following architectural additions:
 
-1. AUTHENTICATION & SECURITY
-----------------------------
-* Switch from mock states to a secure Identity Provider (e.g., Supabase Auth, Firebase Auth, or Clerk).
-* Implement secure server-side JWT verification for API routes.
-* Define database Row Level Security (RLS) rules so that only users with the role 'Pastor / Facilitator / Admin' can approve/delete items or read full analytics.
+1. AUTHENTICATION & SECURITY (COMPLETED & SECURED)
+--------------------------------------------------
+* [COMPLETED] Secured triggers on user signup: Default role to 'Church Member' and 'approved = false' to prevent role spoofing.
+* [COMPLETED] Prevented privilege escalation: Added trigger check (`check_profile_escalation`) in Supabase to restrict self-escalation of roles or approval status.
+* [COMPLETED] Removed insecure bootstrap emails (e.g. admin@pcgami.org). First admin must be manually updated in the database.
+* [NEXT STEP] Apply similar database Row Level Security (RLS) checks on new tables (e.g., chat_messages, rsvps, gratitude_notes) as they are created.
 
 2. BACKEND & PERSISTENT DATABASE
 ---------------------------------

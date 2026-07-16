@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar,
-  Clock,
   Upload,
   Users,
   LogOut,
@@ -32,6 +31,31 @@ interface HeroPhoto {
   url: string;
   caption?: string;
   display_order: number;
+}
+
+interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  author: string;
+  created_at: string;
+}
+
+interface ActivitySchedule {
+  id: string;
+  title: string;
+  description: string;
+  event_date: string;
+  created_at: string;
+}
+
+interface SystemSettings {
+  id: string;
+  church_name: string;
+  banner_title: string;
+  banner_subtitle: string;
+  pinned_event_id: string | null;
+  updated_at: string;
 }
 
 interface RSVP {
@@ -214,6 +238,7 @@ const INITIAL_RSVPS: RSVP[] = [
 export default function App() {
   // Navigation & Page State
   const [activeTab, setActiveTab] = useState<'home' | 'gallery' | 'portal'>('home');
+  const [portalSubTab, setPortalSubTab] = useState<'chat' | 'announcements' | 'rsvp' | 'users' | 'slideshow' | 'settings' | 'schedules'>('chat');
   const [urlFamilyName, setUrlFamilyName] = useState<string | null>(null);
 
   // Modals & Lights
@@ -263,10 +288,65 @@ export default function App() {
     }
   }, []);
 
-  // Fetch hero photos on mount
+  // System Settings, Announcements, Schedules States
+  const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
+  const [announcementsList, setAnnouncementsList] = useState<Announcement[]>([]);
+  const [activitySchedulesList, setActivitySchedulesList] = useState<ActivitySchedule[]>([]);
+
+  // Admin Form States
+  const [editChurchName, setEditChurchName] = useState('');
+  const [editBannerTitle, setEditBannerTitle] = useState('');
+  const [editBannerSubtitle, setEditBannerSubtitle] = useState('');
+
+  // Announcement Form States
+  const [announcementTitle, setAnnouncementTitle] = useState('');
+  const [announcementContent, setAnnouncementContent] = useState('');
+
+  // Schedule Form States
+  const [scheduleTitle, setScheduleTitle] = useState('');
+  const [scheduleDescription, setScheduleDescription] = useState('');
+  const [scheduleDate, setScheduleDate] = useState('');
+  const fetchSystemSettings = React.useCallback(async () => {
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('*')
+      .eq('id', 'general')
+      .single();
+    if (!error && data) {
+      setSystemSettings(data);
+      setEditChurchName(data.church_name);
+      setEditBannerTitle(data.banner_title);
+      setEditBannerSubtitle(data.banner_subtitle);
+    }
+  }, []);
+
+  const fetchAnnouncements = React.useCallback(async () => {
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (!error && data) {
+      setAnnouncementsList(data);
+    }
+  }, []);
+
+  const fetchActivitySchedules = React.useCallback(async () => {
+    const { data, error } = await supabase
+      .from('activity_schedules')
+      .select('*')
+      .order('event_date', { ascending: true });
+    if (!error && data) {
+      setActivitySchedulesList(data);
+    }
+  }, []);
+
+  // Fetch all initial metadata on mount
   useEffect(() => {
     fetchHeroPhotos();
-  }, [fetchHeroPhotos]);
+    fetchSystemSettings();
+    fetchAnnouncements();
+    fetchActivitySchedules();
+  }, [fetchHeroPhotos, fetchSystemSettings, fetchAnnouncements, fetchActivitySchedules]);
 
   // Slideshow interval logic
   useEffect(() => {
@@ -367,6 +447,124 @@ export default function App() {
     }
   }, [currentUser, fetchProfiles]);
 
+  // System Settings, Announcements, and Schedules Admin Actions
+  const handleUpdateSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || currentUser.role !== 'Admin') return;
+    const { error } = await supabase
+      .from('system_settings')
+      .update({
+        church_name: editChurchName,
+        banner_title: editBannerTitle,
+        banner_subtitle: editBannerSubtitle,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', 'general');
+
+    if (error) {
+      alert('Error updating settings: ' + error.message);
+    } else {
+      alert('System Settings updated successfully!');
+      fetchSystemSettings();
+    }
+  };
+
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !['Admin', 'Pastor', 'Church Leader'].includes(currentUser.role)) return;
+    if (!announcementTitle.trim() || !announcementContent.trim()) return;
+
+    const { error } = await supabase
+      .from('announcements')
+      .insert({
+        title: announcementTitle,
+        content: announcementContent,
+        author: currentUser.name
+      });
+
+    if (error) {
+      alert('Error creating announcement: ' + error.message);
+    } else {
+      alert('Announcement posted successfully!');
+      setAnnouncementTitle('');
+      setAnnouncementContent('');
+      fetchAnnouncements();
+    }
+  };
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    if (!currentUser || !['Admin', 'Pastor', 'Church Leader'].includes(currentUser.role)) return;
+    if (!confirm('Are you sure you want to delete this announcement?')) return;
+
+    const { error } = await supabase
+      .from('announcements')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('Error deleting announcement: ' + error.message);
+    } else {
+      fetchAnnouncements();
+    }
+  };
+
+  const handleCreateSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !['Admin', 'Pastor', 'Church Leader'].includes(currentUser.role)) return;
+    if (!scheduleTitle.trim() || !scheduleDate) return;
+
+    const { error } = await supabase
+      .from('activity_schedules')
+      .insert({
+        title: scheduleTitle,
+        description: scheduleDescription,
+        event_date: new Date(scheduleDate).toISOString()
+      });
+
+    if (error) {
+      alert('Error creating schedule: ' + error.message);
+    } else {
+      alert('Activity schedule created successfully!');
+      setScheduleTitle('');
+      setScheduleDescription('');
+      setScheduleDate('');
+      fetchActivitySchedules();
+    }
+  };
+
+  const handleDeleteSchedule = async (id: string) => {
+    if (!currentUser || !['Admin', 'Pastor', 'Church Leader'].includes(currentUser.role)) return;
+    if (!confirm('Are you sure you want to delete this schedule?')) return;
+
+    const { error } = await supabase
+      .from('activity_schedules')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('Error deleting schedule: ' + error.message);
+    } else {
+      fetchActivitySchedules();
+    }
+  };
+
+  const handlePinEvent = async (eventId: string | null) => {
+    if (!currentUser || currentUser.role !== 'Admin') return;
+    const { error } = await supabase
+      .from('system_settings')
+      .update({
+        pinned_event_id: eventId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', 'general');
+
+    if (error) {
+      alert('Error updating pinned event: ' + error.message);
+    } else {
+      fetchSystemSettings();
+    }
+  };
+
   // Chat state
   const [activeChannel, setActiveChannel] = useState('#general-fellowship');
   const [newMessage, setNewMessage] = useState('');
@@ -397,17 +595,29 @@ export default function App() {
     }
   }, []);
 
-  // Countdown timer logic to Thanksgiving Celebration (November 26, 2026)
+
+
+  const pinnedEvent = systemSettings?.pinned_event_id 
+    ? activitySchedulesList.find(e => e.id === systemSettings.pinned_event_id)
+    : null;
+
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+
   useEffect(() => {
-    const eventDate = new Date('November 26, 2026 10:00:00').getTime();
+    if (!pinnedEvent) {
+      setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+      return;
+    }
+
+    const targetDate = new Date(pinnedEvent.event_date).getTime();
 
     const interval = setInterval(() => {
       const now = new Date().getTime();
-      const distance = eventDate - now;
+      const distance = targetDate - now;
 
       if (distance < 0) {
         clearInterval(interval);
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
       } else {
         const days = Math.floor(distance / (1000 * 60 * 60 * 24));
         const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -418,7 +628,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [pinnedEvent]);
 
   // Scroll chat to bottom when channel or messages change
   useEffect(() => {
@@ -493,11 +703,7 @@ export default function App() {
       if (error) {
         alert(error.message);
       } else {
-        if (authEmail === 'admin@pcgami.org') {
-          alert('Registration successful! Auto-approved as Admin. You can now log in.');
-        } else {
-          alert('Registration successful! Your account is pending admin approval.');
-        }
+        alert('Registration successful! Your account is pending admin approval.');
         setAuthMode('login');
       }
     } else {
@@ -619,8 +825,14 @@ export default function App() {
               <Flame className="w-5 h-5 text-church-gold fill-church-gold" />
             </div>
             <div>
-              <span className="font-serif text-2xl font-bold tracking-tight text-church-wood block leading-none">FOJ</span>
-              <span className="text-[10px] uppercase tracking-widest text-church-gold font-bold block">PCGAMI Siay</span>
+              <span className="font-serif text-2xl font-bold tracking-tight text-church-wood block leading-none">
+                {systemSettings?.church_name ? systemSettings.church_name.split('-')[0] : 'FOJ'}
+              </span>
+              <span className="text-[10px] uppercase tracking-widest text-church-gold font-bold block">
+                {systemSettings?.church_name && systemSettings.church_name.includes('-') 
+                  ? systemSettings.church_name.substring(systemSettings.church_name.indexOf('-') + 1) 
+                  : systemSettings?.church_name || 'PCGAMI Siay'}
+              </span>
             </div>
           </div>
 
@@ -693,13 +905,26 @@ export default function App() {
 
               <div className="max-w-4xl mx-auto relative z-20 space-y-6">
                 <span className="text-xs uppercase tracking-widest text-church-gold font-bold bg-church-gold/10 px-3 py-1 rounded-full border border-church-gold/20">
-                  Welcome to FOJ-PCGAMI Siay
+                  Welcome to {systemSettings?.church_name || 'FOJ-PCGAMI Siay'}
                 </span>
                 <h1 className="font-serif text-4xl sm:text-6xl font-bold tracking-tight text-white leading-tight">
-                  A place to belong, grow, <br />and share God's warm love.
+                  {systemSettings?.banner_title ? (
+                    systemSettings.banner_title.includes('<br />') || systemSettings.banner_title.includes('\n') ? (
+                      systemSettings.banner_title.split(/<br\s*\/?>|\n/).map((line, idx) => (
+                        <React.Fragment key={idx}>
+                          {line}
+                          {idx < systemSettings.banner_title.split(/<br\s*\/?>|\n/).length - 1 && <br />}
+                        </React.Fragment>
+                      ))
+                    ) : (
+                      systemSettings.banner_title
+                    )
+                  ) : (
+                    <>A place to belong, grow, <br />and share God's warm love.</>
+                  )}
                 </h1>
-                <p className="text-church-goldLight text-lg sm:text-xl font-light max-w-2xl mx-auto leading-relaxed">
-                  "Let us hold fast the confession of our hope without wavering, for He who promised is faithful. And let us consider how to stir up one another to love and good works." — Hebrews 10:23-24
+                <p className="text-church-goldLight text-lg sm:text-xl font-light max-w-2xl mx-auto leading-relaxed whitespace-pre-line">
+                  {systemSettings?.banner_subtitle || `"Let us hold fast the confession of our hope without wavering, for He who promised is faithful. And let us consider how to stir up one another to love and good works." — Hebrews 10:23-24`}
                 </p>
                 <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-4">
                   <button
@@ -718,34 +943,124 @@ export default function App() {
               </div>
             </div>
 
+
+
             {/* Event Countdown Banner */}
-            <div className="bg-church-creamDark/60 border-y border-church-gold/20 py-8 px-4">
-              <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-6">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-church-gold/20 text-church-goldDark rounded-full flex items-center justify-center">
-                    <Clock className="w-6 h-6 animate-pulse" />
+            {pinnedEvent && (
+              <div className="bg-church-creamDark/60 border-y border-church-gold/20 py-8 px-4 animate-fadeIn">
+                <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-church-gold/20 text-church-goldDark rounded-full flex items-center justify-center">
+                      <span className="text-xl">⏳</span>
+                    </div>
+                    <div>
+                      <span className="text-xs uppercase tracking-widest text-church-goldDark font-bold block">Featured Event Countdown</span>
+                      <h3 className="font-serif text-2xl font-bold text-church-wood">{pinnedEvent.title}</h3>
+                      <p className="text-sm text-church-charcoal/70">
+                        Join us on {new Date(pinnedEvent.event_date).toLocaleDateString([], { dateStyle: 'long' })} at {new Date(pinnedEvent.event_date).toLocaleTimeString([], { timeStyle: 'short' })}.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-serif text-2xl font-bold text-church-wood">Church Thanksgiving Celebration</h3>
-                    <p className="text-sm text-church-charcoal/70">Join us on November 26, 2026 at 10:00 AM for our annual harvest gathering.</p>
+
+                  {/* Countdown numbers */}
+                  <div className="flex items-center space-x-3 sm:space-x-6">
+                    {[
+                      { label: 'Days', value: timeLeft.days },
+                      { label: 'Hours', value: timeLeft.hours },
+                      { label: 'Mins', value: timeLeft.minutes },
+                      { label: 'Secs', value: timeLeft.seconds }
+                    ].map((unit, index) => (
+                      <div key={index} className="flex flex-col items-center">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-church-wood rounded-xl flex items-center justify-center text-church-gold font-serif text-2xl sm:text-3xl font-bold shadow-md border border-church-gold/20 transition-all duration-300">
+                          {String(unit.value).padStart(2, '0')}
+                        </div>
+                        <span className="text-xs uppercase tracking-widest text-church-wood/80 font-bold mt-1.5">{unit.label}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-
-                {/* Countdown numbers */}
-                <div className="flex items-center space-x-3 sm:space-x-6">
-                  {[
-                    { label: 'Days', value: timeLeft.days },
-                    { label: 'Hours', value: timeLeft.hours },
-                    { label: 'Mins', value: timeLeft.minutes },
-                    { label: 'Secs', value: timeLeft.seconds }
-                  ].map((unit, index) => (
-                    <div key={index} className="flex flex-col items-center">
-                      <div className="w-16 h-16 sm:w-20 sm:h-20 bg-church-wood rounded-xl flex items-center justify-center text-church-gold font-serif text-2xl sm:text-3xl font-bold shadow-md border border-church-gold/20 transition-all duration-300">
-                        {String(unit.value).padStart(2, '0')}
-                      </div>
-                      <span className="text-xs uppercase tracking-widest text-church-wood/80 font-bold mt-1.5">{unit.label}</span>
+              </div>
+            )}
+            <div className="bg-church-creamDark/30 py-16 border-b border-church-creamDark/60">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                  
+                  {/* Left Column: Announcements */}
+                  <div className="space-y-8">
+                    <div className="border-b border-church-creamDark pb-4 flex items-center justify-between">
+                      <h2 className="font-serif text-3xl font-bold text-church-wood flex items-center space-x-2">
+                        <span className="text-2xl">📢</span>
+                        <span>Announcements</span>
+                      </h2>
+                      <span className="text-xs uppercase tracking-widest text-church-gold font-bold bg-church-gold/10 px-2.5 py-1 rounded-full border border-church-gold/20">Latest Updates</span>
                     </div>
-                  ))}
+
+                    <div className="space-y-6">
+                      {announcementsList.length === 0 ? (
+                        <div className="bg-white p-6 rounded-2xl border border-church-creamDark/60 text-center text-church-charcoal/50 text-sm">
+                          No active announcements at this time.
+                        </div>
+                      ) : (
+                        announcementsList.slice(0, 3).map((ann) => (
+                          <div key={ann.id} className="bg-white p-6 rounded-2xl border border-church-creamDark/60 shadow-sm space-y-3 hover:shadow-md transition-all duration-300">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-serif font-bold text-lg text-church-wood">{ann.title}</h4>
+                              <span className="text-xs text-church-charcoal/40">
+                                {new Date(ann.created_at).toLocaleDateString([], { dateStyle: 'medium' })}
+                              </span>
+                            </div>
+                            <p className="text-sm text-church-charcoal/80 leading-relaxed whitespace-pre-line">{ann.content}</p>
+                            <div className="text-xs text-church-charcoal/50 text-right">
+                              — Posted by <span className="font-semibold text-church-wood">{ann.author}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Church Schedules / Activities */}
+                  <div className="space-y-8">
+                    <div className="border-b border-church-creamDark pb-4 flex items-center justify-between">
+                      <h2 className="font-serif text-3xl font-bold text-church-wood flex items-center space-x-2">
+                        <span className="text-2xl">📅</span>
+                        <span>Upcoming Activities</span>
+                      </h2>
+                      <span className="text-xs uppercase tracking-widest text-church-wood/80 font-bold bg-church-creamDark px-2.5 py-1 rounded-full">Calendar</span>
+                    </div>
+
+                    <div className="space-y-4">
+                      {activitySchedulesList.length === 0 ? (
+                        <div className="bg-white p-6 rounded-2xl border border-church-creamDark/60 text-center text-church-charcoal/50 text-sm">
+                          No scheduled activities at this time.
+                        </div>
+                      ) : (
+                        activitySchedulesList.map((sched) => {
+                          const dateObj = new Date(sched.event_date);
+                          const day = dateObj.toLocaleDateString([], { day: '2-digit' });
+                          const month = dateObj.toLocaleDateString([], { month: 'short' });
+                          return (
+                            <div key={sched.id} className="bg-white p-5 rounded-2xl border border-church-creamDark/60 shadow-sm flex space-x-4 items-start hover:shadow-md transition-all duration-300">
+                              <div className="w-12 h-12 bg-church-wood text-church-gold rounded-xl flex flex-col items-center justify-center font-bold shrink-0 shadow-sm">
+                                <span className="text-sm leading-none">{day}</span>
+                                <span className="text-[9px] uppercase tracking-wide mt-0.5">{month}</span>
+                              </div>
+                              <div className="space-y-1">
+                                <h4 className="font-serif font-bold text-church-wood text-base">{sched.title}</h4>
+                                {sched.description && (
+                                  <p className="text-xs text-church-charcoal/70 leading-relaxed">{sched.description}</p>
+                                )}
+                                <span className="inline-block text-[10px] text-church-goldDark bg-church-gold/10 px-2 py-0.5 rounded font-medium">
+                                  {dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
                 </div>
               </div>
             </div>
@@ -1044,20 +1359,124 @@ export default function App() {
                     <span>Log Out</span>
                   </button>
                 </div>
+                {/* Portal Content Layout */}
+                <div className="flex flex-col lg:flex-row gap-8">
+                  
+                  {/* Left Column: Navigation Sidebar */}
+                  <div className="w-full lg:w-64 flex-shrink-0">
+                    <div className="bg-white rounded-2xl border border-church-creamDark/80 p-4 space-y-1 lg:sticky lg:top-8 shadow-sm">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-church-charcoal/50 px-3 mb-3">Portal Menu</h3>
+                      
+                      <button 
+                        type="button"
+                        onClick={() => setPortalSubTab('chat')}
+                        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                          portalSubTab === 'chat' 
+                            ? 'bg-church-wood text-white shadow-sm' 
+                            : 'text-church-charcoal hover:bg-church-creamDark/40'
+                        }`}
+                      >
+                        <span className="text-base">💬</span>
+                        <span>Community Chat</span>
+                      </button>
 
-                {/* Dashboard Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                      <button 
+                        type="button"
+                        onClick={() => setPortalSubTab('announcements')}
+                        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                          portalSubTab === 'announcements' 
+                            ? 'bg-church-wood text-white shadow-sm' 
+                            : 'text-church-charcoal hover:bg-church-creamDark/40'
+                        }`}
+                      >
+                        <span className="text-base">📢</span>
+                        <span>Announcements</span>
+                      </button>
 
-                  {/* Left & Middle Column: Welcome Message, Announcements & Chat */}
-                  <div className="lg:col-span-2 space-y-8">
+                      {(currentUser.role === 'Admin' || currentUser.role === 'Pastor') && (
+                        <button 
+                          type="button"
+                          onClick={() => setPortalSubTab('rsvp')}
+                          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                            portalSubTab === 'rsvp' 
+                              ? 'bg-church-wood text-white shadow-sm' 
+                              : 'text-church-charcoal hover:bg-church-creamDark/40'
+                          }`}
+                        >
+                          <span className="text-base">📊</span>
+                          <span>RSVP & Volunteers</span>
+                        </button>
+                      )}
 
-                    {/* Welcome Notice Card */}
+                      {(currentUser.role === 'Admin' || currentUser.role === 'Pastor' || currentUser.role === 'Church Leader') && (
+                        <button 
+                          type="button"
+                          onClick={() => setPortalSubTab('schedules')}
+                          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                            portalSubTab === 'schedules' 
+                              ? 'bg-church-wood text-white shadow-sm' 
+                              : 'text-church-charcoal hover:bg-church-creamDark/40'
+                          }`}
+                        >
+                          <span className="text-base">📅</span>
+                          <span>Church Schedules</span>
+                        </button>
+                      )}
+
+                      {currentUser.role === 'Admin' && (
+                        <>
+                          <button 
+                            type="button"
+                            onClick={() => setPortalSubTab('users')}
+                            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                              portalSubTab === 'users' 
+                                ? 'bg-church-wood text-white shadow-sm' 
+                                : 'text-church-charcoal hover:bg-church-creamDark/40'
+                            }`}
+                          >
+                            <span className="text-base">👥</span>
+                            <span>User Approvals</span>
+                          </button>
+
+                          <button 
+                            type="button"
+                            onClick={() => setPortalSubTab('slideshow')}
+                            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                              portalSubTab === 'slideshow' 
+                                ? 'bg-church-wood text-white shadow-sm' 
+                                : 'text-church-charcoal hover:bg-church-creamDark/40'
+                            }`}
+                          >
+                            <span className="text-base">🖼️</span>
+                            <span>Hero Slideshow</span>
+                          </button>
+
+                          <button 
+                            type="button"
+                            onClick={() => setPortalSubTab('settings')}
+                            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                              portalSubTab === 'settings' 
+                                ? 'bg-church-wood text-white shadow-sm' 
+                                : 'text-church-charcoal hover:bg-church-creamDark/40'
+                            }`}
+                          >
+                            <span className="text-base">⚙️</span>
+                            <span>System Settings</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Dynamic Sub-tab Panel */}
+                  <div className="flex-grow space-y-8">
+                    
+                    {/* Welcome Notice Card (Always visible at top of Dashboard) */}
                     <div className="bg-gradient-to-br from-church-wood to-church-charcoal text-white p-8 rounded-2xl shadow-md relative overflow-hidden">
                       <div className="absolute top-0 right-0 w-48 h-48 bg-church-gold/15 rounded-full blur-2xl pointer-events-none"></div>
                       <div className="relative z-10 space-y-4">
                         <h3 className="font-serif text-2xl font-bold text-church-goldLight">Ministry Hub Notes</h3>
-
-                        {/* Custom message based on Role */}
+                        
                         {currentUser.role === 'Admin' && (
                           <p className="text-sm text-white/95 leading-relaxed">
                             Hello Administrator. You have full system oversight. You can approve or revoke member access, modify user roles, and review gratitude notes.
@@ -1091,368 +1510,251 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Announcement Board */}
-                    <div className="bg-white p-6 sm:p-8 rounded-2xl border border-church-creamDark/80 shadow-sm space-y-6">
-                      <div className="flex items-center justify-between border-b border-church-creamDark pb-4">
-                        <h3 className="font-serif text-2xl font-bold text-church-wood flex items-center space-x-2">
-                          <BookOpen className="w-5 h-5 text-church-gold" />
-                          <span>Church Announcements</span>
-                        </h3>
-                        <span className="text-xs uppercase tracking-widest text-church-gold font-bold">Latest Updates</span>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="p-4 bg-church-creamDark/20 rounded-xl border-l-4 border-church-gold space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-sm text-church-wood">Thanksgiving Choir Signup</h4>
-                            <span className="text-xs text-church-charcoal/50">Today</span>
+                    {/* Sub-tab: Community Chat */}
+                    {portalSubTab === 'chat' && (
+                      <div className="bg-white rounded-2xl border border-church-creamDark shadow-md flex flex-col h-[550px] overflow-hidden">
+                        {/* Chat Header */}
+                        <div className="bg-church-creamDark/50 px-6 py-4 border-b border-church-creamDark flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
+                            <span className="font-serif font-bold text-church-wood text-lg">{activeChannel}</span>
                           </div>
-                          <p className="text-xs text-church-charcoal/80">Rehearsals start next Tuesday. Sing or play instruments to glorify God!</p>
-                        </div>
-                        <div className="p-4 bg-church-creamDark/20 rounded-xl border-l-4 border-church-wood space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-sm text-church-wood">Midweek Bible Study Series</h4>
-                            <span className="text-xs text-church-charcoal/50">3 days ago</span>
-                          </div>
-                          <p className="text-xs text-church-charcoal/80">We are diving into the Book of Ephesians. Join online or in the main fellowship hall.</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Real-time Interactive Chat */}
-                    <div className="bg-white rounded-2xl border border-church-creamDark shadow-md flex flex-col h-[500px] overflow-hidden">
-                      {/* Chat Header */}
-                      <div className="bg-church-creamDark/50 px-6 py-4 border-b border-church-creamDark flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
-                          <span className="font-serif font-bold text-church-wood text-lg">{activeChannel}</span>
-                        </div>
-                        <span className="text-xs text-church-charcoal/60">Active Channel Chat</span>
-                      </div>
-
-                      {/* Chat Body Grid */}
-                      <div className="flex-grow flex overflow-hidden">
-                        {/* Chat Sidebar Channels */}
-                        <div className="w-1/3 sm:w-1/4 border-r border-church-creamDark bg-church-bg/30 p-3 space-y-4 overflow-y-auto">
-                          <div className="space-y-1">
-                            <span className="text-[10px] uppercase font-bold text-church-charcoal/50 tracking-widest block px-2 mb-2">Channels</span>
-                            {[
-                              '#general-fellowship',
-                              '#worship-team',
-                              '#media-team',
-                              '#youth-leaders'
-                            ].map((chan) => (
-                              <button
-                                key={chan}
-                                onClick={() => setActiveChannel(chan)}
-                                className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-all ${activeChannel === chan
-                                    ? 'bg-church-wood text-white shadow-sm'
-                                    : 'text-church-charcoal hover:bg-church-creamDark'
-                                  }`}
-                              >
-                                {chan}
-                              </button>
-                            ))}
-                          </div>
+                          <span className="text-xs text-church-charcoal/60">Active Channel Chat</span>
                         </div>
 
-                        {/* Chat Message Stream */}
-                        <div className="w-2/3 sm:w-3/4 flex flex-col bg-white overflow-hidden">
-                          <div className="flex-grow p-4 overflow-y-auto space-y-4">
-                            {chatMessages
-                              .filter(msg => msg.channel === activeChannel)
-                              .map((msg) => (
-                                <div key={msg.id} className={`flex flex-col ${msg.isSelf ? 'items-end' : 'items-start'}`}>
-                                  <div className="flex items-center space-x-1.5 mb-1">
-                                    <span className="text-[10px] font-bold text-church-wood">{msg.sender}</span>
-                                    <span className="text-[8px] bg-church-creamDark px-1.5 py-0.5 rounded text-church-charcoal/70 uppercase scale-90">{msg.senderRole.split(' / ')[0]}</span>
-                                    <span className="text-[8px] text-church-charcoal/40">{msg.timestamp}</span>
-                                  </div>
-
-                                  {/* Chat bubble - coloring based on sender */}
-                                  <div className={`relative group max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm transition-all duration-200 ${msg.isSelf
-                                      ? 'bg-church-wood text-white rounded-tr-none'
-                                      : 'bg-church-creamDark/70 text-church-charcoal rounded-tl-none'
-                                    }`}>
-                                    <p className="leading-relaxed">{msg.text}</p>
-
-                                    {/* Emojis Reactions list */}
-                                    {msg.emojis && msg.emojis.length > 0 && (
-                                      <div className="flex items-center space-x-1 mt-1">
-                                        {msg.emojis.map((e, i) => (
-                                          <span key={i} className="text-xs bg-white/20 px-1 py-0.5 rounded">{e}</span>
-                                        ))}
-                                      </div>
-                                    )}
-
-                                    {/* Quick Hover Reactions */}
-                                    <div className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-church-creamDark shadow-md rounded-full px-2 py-1 flex items-center space-x-1 z-10 ${msg.isSelf ? '-left-20' : '-right-20'
-                                      }`}>
-                                      {['🙏', '❤️', '🙌'].map((emoji) => (
-                                        <button
-                                          key={emoji}
-                                          onClick={() => toggleReaction(msg.id, emoji)}
-                                          className="hover:scale-125 transition-transform text-xs"
-                                        >
-                                          {emoji}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            <div ref={chatEndRef} />
-                          </div>
-
-                          {/* Chat Input Bar */}
-                          <form onSubmit={handleSendMessage} className="p-3 border-t border-church-creamDark flex items-center space-x-2 bg-church-creamDark/30">
-                            {/* Quick emoji popovers */}
-                            <div className="flex items-center space-x-1 border-r border-church-creamDark/60 pr-2">
-                              {['🙏', '❤️', '🙌', '✨'].map((emoji) => (
+                        {/* Chat Body Grid */}
+                        <div className="flex-grow flex overflow-hidden">
+                          {/* Chat Sidebar Channels */}
+                          <div className="w-1/3 sm:w-1/4 border-r border-church-creamDark bg-church-bg/30 p-3 space-y-4 overflow-y-auto">
+                            <div className="space-y-1">
+                              <span className="text-[10px] uppercase font-bold text-church-charcoal/50 tracking-widest block px-2 mb-2">Channels</span>
+                              {[
+                                '#general-fellowship',
+                                '#worship-team',
+                                '#media-team',
+                                '#youth-leaders'
+                              ].map((chan) => (
                                 <button
-                                  key={emoji}
+                                  key={chan}
                                   type="button"
-                                  onClick={() => addEmoji(emoji)}
-                                  className="hover:scale-125 transition-transform text-base p-1"
+                                  onClick={() => setActiveChannel(chan)}
+                                  className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${activeChannel === chan
+                                      ? 'bg-church-wood text-white shadow-sm'
+                                      : 'text-church-charcoal hover:bg-church-creamDark'
+                                    }`}
                                 >
-                                  {emoji}
+                                  {chan}
                                 </button>
                               ))}
                             </div>
+                          </div>
 
-                            <input
-                              type="text"
-                              value={newMessage}
-                              onChange={(e) => setNewMessage(e.target.value)}
-                              placeholder={`Message ${activeChannel}...`}
-                              className="flex-grow px-3 py-2 bg-white rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold text-sm"
-                            />
-
-                            <button
-                              type="submit"
-                              className="p-2 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood rounded-lg transition-all"
-                            >
-                              <Send className="w-4 h-4" />
-                            </button>
-                          </form>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Column: Ministry Calendar & Admin Controls */}
-                  <div className="space-y-8">
-
-                    {/* Admin User Approval and Moderation Panel */}
-                    {currentUser.role === 'Admin' && (
-                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
-                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
-                          <Users className="w-6 h-6 text-church-gold" />
-                          <h3 className="font-serif text-2xl font-bold">User Moderation</h3>
-                        </div>
-
-                        <div className="space-y-4">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Pending Approvals ({profilesList.filter(p => !p.approved).length})</h4>
-                          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                            {profilesList.filter(p => !p.approved).length === 0 ? (
-                              <p className="text-xs text-church-charcoal/50 text-center py-2">No pending user registrations.</p>
-                            ) : (
-                              profilesList.filter(p => !p.approved).map((profile) => (
-                                <div key={profile.id} className="bg-church-bg p-3 rounded-lg border border-church-creamDark space-y-2 text-xs">
-                                  <div className="flex justify-between items-start">
-                                    <div>
-                                      <span className="font-bold text-church-wood block">{profile.name}</span>
-                                      <span className="text-[10px] text-church-charcoal/50 block">Requested: {profile.role}</span>
+                          {/* Chat Message Stream */}
+                          <div className="w-2/3 sm:w-3/4 flex flex-col bg-white overflow-hidden">
+                            <div className="flex-grow p-4 overflow-y-auto space-y-4">
+                              {chatMessages
+                                .filter(msg => msg.channel === activeChannel)
+                                .map((msg) => (
+                                  <div key={msg.id} className={`flex flex-col ${msg.isSelf ? 'items-end' : 'items-start'}`}>
+                                    <div className="flex items-center space-x-1.5 mb-1">
+                                      <span className="text-[10px] font-bold text-church-wood">{msg.sender}</span>
+                                      <span className="text-[8px] bg-church-creamDark px-1.5 py-0.5 rounded text-church-charcoal/70 uppercase scale-90">{msg.senderRole.split(' / ')[0]}</span>
+                                      <span className="text-[8px] text-church-charcoal/40">{msg.timestamp}</span>
                                     </div>
-                                    <div className="flex space-x-1.5">
-                                      <button
-                                        onClick={async () => {
-                                          const { error } = await supabase.from('profiles').delete().eq('id', profile.id);
-                                          if (error) alert(error.message);
-                                          else fetchProfiles();
-                                        }}
-                                        className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded"
-                                        title="Deny / Delete"
-                                      >
-                                        <X className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={async () => {
-                                          const { error } = await supabase.from('profiles').update({ approved: true }).eq('id', profile.id);
-                                          if (error) alert(error.message);
-                                          else fetchProfiles();
-                                        }}
-                                        className="p-1 bg-green-50 text-green-600 hover:bg-green-100 rounded"
-                                        title="Approve User"
-                                      >
-                                        <Check className="w-3.5 h-3.5" />
-                                      </button>
+
+                                    {/* Chat bubble - coloring based on sender */}
+                                    <div className={`relative group max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm transition-all duration-200 ${msg.isSelf
+                                        ? 'bg-church-wood text-white rounded-tr-none'
+                                        : 'bg-church-creamDark/70 text-church-charcoal rounded-tl-none'
+                                      }`}>
+                                      <p className="leading-relaxed">{msg.text}</p>
+
+                                      {/* Emojis Reactions list */}
+                                      {msg.emojis && msg.emojis.length > 0 && (
+                                        <div className="flex items-center space-x-1 mt-1">
+                                          {msg.emojis.map((emoji, i) => (
+                                            <span key={i} className="text-xs bg-white/20 px-1 rounded">{emoji}</span>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {/* Quick Hover Reactions */}
+                                      <div className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-church-creamDark shadow-md rounded-full px-2 py-1 flex items-center space-x-1 z-10 ${msg.isSelf ? '-left-20' : '-right-20'
+                                        }`}>
+                                        {['🙏', '❤️', '🙌'].map((emoji) => (
+                                          <button
+                                            key={emoji}
+                                            type="button"
+                                            onClick={() => toggleReaction(msg.id, emoji)}
+                                            className="hover:scale-125 transition-transform text-xs cursor-pointer"
+                                          >
+                                            {emoji}
+                                          </button>
+                                        ))}
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
+                                ))}
+                              <div ref={chatEndRef} />
+                            </div>
 
-                        <div className="space-y-4 pt-2 border-t border-church-creamDark">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">All Approved Members ({profilesList.filter(p => p.approved).length})</h4>
-                          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                            {profilesList.filter(p => p.approved).map((profile) => (
-                              <div key={profile.id} className="flex justify-between items-center text-xs p-2 bg-church-bg/50 rounded-lg">
-                                <div>
-                                  <span className="font-semibold text-church-wood block">{profile.name}</span>
-                                  <span className="text-[10px] text-church-charcoal/50">{profile.role}</span>
-                                </div>
-                                {profile.email !== 'admin@pcgami.org' && (
-                                  <div className="flex space-x-1 items-center">
-                                    <select
-                                      value={profile.role}
-                                      onChange={async (e) => {
-                                        const newRole = e.target.value;
-                                        const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', profile.id);
-                                        if (error) alert(error.message);
-                                        else fetchProfiles();
-                                      }}
-                                      className="px-1.5 py-0.5 border border-church-creamDark rounded text-[10px] bg-white text-church-charcoal focus:outline-none"
-                                    >
-                                      <option value="Admin">Admin</option>
-                                      <option value="Pastor">Pastor</option>
-                                      <option value="Church Leader">Church Leader</option>
-                                      <option value="Youth Leader">Youth Leader</option>
-                                      <option value="Church Member">Church Member</option>
-                                      <option value="Young People">Young People</option>
-                                    </select>
-                                    <button
-                                      onClick={async () => {
-                                        const { error } = await supabase.from('profiles').update({ approved: false }).eq('id', profile.id);
-                                        if (error) alert(error.message);
-                                        else fetchProfiles();
-                                      }}
-                                      className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                      title="Revoke Access"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Admin Hero Slideshow Management Panel */}
-                    {currentUser.role === 'Admin' && (
-                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
-                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
-                          <Upload className="w-6 h-6 text-church-gold" />
-                          <h3 className="font-serif text-2xl font-bold">Hero Slideshow</h3>
-                        </div>
-
-                        {/* Add new slide form */}
-                        <form
-                          onSubmit={async (e) => {
-                            e.preventDefault();
-                            if (!newHeroUrl.trim()) return;
-
-                            const { error } = await supabase.from('hero_photos').insert([
-                              {
-                                url: newHeroUrl,
-                                caption: newHeroCaption,
-                                display_order: newHeroOrder
-                              }
-                            ]);
-
-                            if (error) {
-                              alert(error.message);
-                            } else {
-                              setNewHeroUrl('');
-                              setNewHeroCaption('');
-                              setNewHeroOrder(0);
-                              fetchHeroPhotos();
-                            }
-                          }}
-                          className="space-y-3"
-                        >
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Add New Slide</h4>
-                          <div>
-                            <input
-                              type="text"
-                              required
-                              placeholder="Image URL (e.g. https://images.unsplash.com/...)"
-                              value={newHeroUrl}
-                              onChange={(e) => setNewHeroUrl(e.target.value)}
-                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white"
-                            />
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <input
-                              type="text"
-                              placeholder="Caption"
-                              value={newHeroCaption}
-                              onChange={(e) => setNewHeroCaption(e.target.value)}
-                              className="col-span-2 px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white"
-                            />
-                            <input
-                              type="number"
-                              placeholder="Order"
-                              value={newHeroOrder}
-                              onChange={(e) => setNewHeroOrder(parseInt(e.target.value) || 0)}
-                              className="px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white"
-                            />
-                          </div>
-                          <button
-                            type="submit"
-                            className="w-full py-2 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded text-xs transition-all shadow"
-                          >
-                            Add Slide Image
-                          </button>
-                        </form>
-
-                        {/* Current slides list */}
-                        <div className="space-y-4 pt-4 border-t border-church-creamDark">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Active Slides ({heroPhotos.length})</h4>
-                          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                            {heroPhotos.length === 0 ? (
-                              <p className="text-xs text-church-charcoal/50 text-center py-2">No custom slideshow images. Falling back to default cover.</p>
-                            ) : (
-                              heroPhotos.map((photo) => (
-                                <div key={photo.id} className="flex items-center space-x-3 p-2 bg-church-bg/50 rounded-lg">
-                                  <img
-                                    src={photo.url}
-                                    alt={photo.caption || 'Slide'}
-                                    className="w-12 h-12 object-cover rounded border border-church-creamDark"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1515162305285-0293e4767cc2?q=80&w=800';
-                                    }}
-                                  />
-                                  <div className="flex-grow min-w-0">
-                                    <span className="font-semibold text-xs text-church-wood block truncate">{photo.caption || 'No Caption'}</span>
-                                    <span className="text-[10px] text-church-charcoal/50 block">Order: {photo.display_order}</span>
-                                  </div>
+                            {/* Chat Input form */}
+                            <form onSubmit={handleSendMessage} className="p-4 border-t border-church-creamDark flex items-center space-x-2 bg-church-bg/10">
+                              {/* Quick emoji popovers */}
+                              <div className="flex items-center space-x-1 border-r border-church-creamDark/60 pr-2">
+                                {['🙏', '❤️', '🙌', '✨'].map((emoji) => (
                                   <button
-                                    onClick={async () => {
-                                      const { error } = await supabase.from('hero_photos').delete().eq('id', photo.id);
-                                      if (error) alert(error.message);
-                                      else fetchHeroPhotos();
-                                    }}
-                                    className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded"
-                                    title="Delete Slide"
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => addEmoji(emoji)}
+                                    className="hover:scale-125 transition-transform text-sm cursor-pointer"
                                   >
-                                    <X className="w-3.5 h-3.5" />
+                                    {emoji}
                                   </button>
+                                ))}
+                              </div>
+
+                              <input
+                                type="text"
+                                value={newMessage}
+                                onChange={(e) => setNewMessage(e.target.value)}
+                                placeholder={`Message ${activeChannel}...`}
+                                className="flex-grow px-3 py-2 bg-white rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold text-sm text-church-charcoal"
+                              />
+
+                              <button
+                                type="submit"
+                                className="p-2 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood rounded-lg transition-all cursor-pointer"
+                              >
+                                <Send className="w-4 h-4" />
+                              </button>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sub-tab: Announcements & Schedules */}
+                    {portalSubTab === 'announcements' && (
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                        {/* Announcement Board */}
+                        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-church-creamDark/80 shadow-sm space-y-6">
+                          <div className="flex items-center justify-between border-b border-church-creamDark pb-4">
+                            <h3 className="font-serif text-2xl font-bold text-church-wood flex items-center space-x-2">
+                              <BookOpen className="w-5 h-5 text-church-gold" />
+                              <span>Church Announcements</span>
+                            </h3>
+                            <span className="text-xs uppercase tracking-widest text-church-gold font-bold">Latest Updates</span>
+                          </div>
+
+                          {/* Leader Form to Post Announcement */}
+                          {['Admin', 'Pastor', 'Church Leader'].includes(currentUser.role) && (
+                            <form onSubmit={handleCreateAnnouncement} className="bg-church-creamDark/20 p-4 rounded-xl border border-church-gold/20 space-y-3">
+                              <span className="text-[10px] uppercase font-bold text-church-wood tracking-wider block">Post New Announcement</span>
+                              <div>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="Announcement Title"
+                                  value={announcementTitle}
+                                  onChange={(e) => setAnnouncementTitle(e.target.value)}
+                                  className="w-full px-3 py-2 text-xs rounded border border-church-creamDark bg-white focus:outline-none focus:border-church-gold text-church-charcoal"
+                                />
+                              </div>
+                              <div>
+                                <textarea
+                                  required
+                                  rows={2}
+                                  placeholder="Announcement content..."
+                                  value={announcementContent}
+                                  onChange={(e) => setAnnouncementContent(e.target.value)}
+                                  className="w-full px-3 py-2 text-xs rounded border border-church-creamDark bg-white focus:outline-none focus:border-church-gold text-church-charcoal"
+                                />
+                              </div>
+                              <button
+                                type="submit"
+                                className="w-full py-1.5 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded text-xs transition-all shadow cursor-pointer animate-press"
+                              >
+                                Post Announcement
+                              </button>
+                            </form>
+                          )}
+
+                          <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+                            {announcementsList.length === 0 ? (
+                              <p className="text-xs text-church-charcoal/50 text-center py-4">No active announcements.</p>
+                            ) : (
+                              announcementsList.map((ann) => (
+                                <div key={ann.id} className="p-4 bg-church-creamDark/20 rounded-xl border-l-4 border-church-gold space-y-1.5 relative group">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="font-bold text-sm text-church-wood">{ann.title}</h4>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-[10px] text-church-charcoal/50">
+                                        {new Date(ann.created_at).toLocaleDateString([], { dateStyle: 'medium' })}
+                                      </span>
+                                      {['Admin', 'Pastor', 'Church Leader'].includes(currentUser.role) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteAnnouncement(ann.id)}
+                                          className="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
+                                          title="Delete Announcement"
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-church-charcoal/80 whitespace-pre-line">{ann.content}</p>
+                                  <div className="text-[9px] text-church-charcoal/50 text-right font-medium">
+                                    — Posted by {ann.author}
+                                  </div>
                                 </div>
                               ))
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Ministry Schedule & Calendar */}
+                        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-church-creamDark shadow-sm space-y-6">
+                          <h3 className="font-serif text-2xl font-bold text-church-wood flex items-center space-x-2">
+                            <Calendar className="w-5 h-5 text-church-gold" />
+                            <span>Ministry Schedules</span>
+                          </h3>
+
+                          <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
+                            {activitySchedulesList.length === 0 ? (
+                              <p className="text-xs text-church-charcoal/50 text-center py-4">No scheduled activities.</p>
+                            ) : (
+                              activitySchedulesList.map((sched) => {
+                                const dateObj = new Date(sched.event_date);
+                                const day = dateObj.toLocaleDateString([], { day: '2-digit' });
+                                const month = dateObj.toLocaleDateString([], { month: 'short' });
+                                return (
+                                  <div key={sched.id} className="flex space-x-3 text-sm border-b border-church-creamDark/40 pb-3 last:border-0 last:pb-0">
+                                    <div className="w-10 h-10 bg-church-creamDark/80 rounded-lg flex flex-col items-center justify-center font-bold text-church-wood shrink-0">
+                                      <span className="text-xs leading-none">{day}</span>
+                                      <span className="text-[9px] uppercase tracking-wide">{month}</span>
+                                    </div>
+                                    <div>
+                                      <h4 className="font-bold text-church-wood text-sm">{sched.title}</h4>
+                                      {sched.description && (
+                                        <p className="text-xs text-church-charcoal/70">{sched.description}</p>
+                                      )}
+                                      <span className="text-[10px] text-church-goldDark font-semibold">
+                                        {dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })
                             )}
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Facilitator Admin Dashboard Button and Tally */}
-                    {(currentUser.role === 'Admin' || currentUser.role === 'Pastor') && (
+                    {/* Sub-tab: RSVP & Facilitator Dashboard */}
+                    {portalSubTab === 'rsvp' && (currentUser.role === 'Admin' || currentUser.role === 'Pastor') && (
                       <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-gold shadow-md space-y-6">
                         <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
                           <Shield className="w-6 h-6 text-church-gold" />
@@ -1507,15 +1809,17 @@ export default function App() {
                                   <p className="italic text-church-charcoal/90">"{note.text}"</p>
                                   <div className="flex space-x-2 justify-end">
                                     <button
+                                      type="button"
                                       onClick={() => hideNote(note.id)}
-                                      className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded"
+                                      className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded cursor-pointer"
                                       title="Reject/Hide"
                                     >
                                       <X className="w-3.5 h-3.5" />
                                     </button>
                                     <button
+                                      type="button"
                                       onClick={() => approveNote(note.id)}
-                                      className="p-1 bg-green-50 text-green-600 hover:bg-green-100 rounded"
+                                      className="p-1 bg-green-50 text-green-600 hover:bg-green-100 rounded cursor-pointer"
                                       title="Approve note"
                                     >
                                       <Check className="w-3.5 h-3.5" />
@@ -1529,52 +1833,392 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Ministry Schedule & Calendar */}
-                    <div className="bg-white p-6 sm:p-8 rounded-2xl border border-church-creamDark shadow-sm space-y-6">
-                      <h3 className="font-serif text-2xl font-bold text-church-wood flex items-center space-x-2">
-                        <Calendar className="w-5 h-5 text-church-gold" />
-                        <span>Ministry Schedules</span>
-                      </h3>
+                    {/* Sub-tab: User Approvals */}
+                    {portalSubTab === 'users' && currentUser.role === 'Admin' && (
+                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
+                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
+                          <Users className="w-6 h-6 text-church-gold" />
+                          <h3 className="font-serif text-2xl font-bold">User Moderation</h3>
+                        </div>
 
-                      <div className="space-y-4">
-                        <div className="flex space-x-3 text-sm">
-                          <div className="w-10 h-10 bg-church-creamDark/80 rounded-lg flex flex-col items-center justify-center font-bold text-church-wood shrink-0">
-                            <span className="text-xs leading-none">12</span>
-                            <span className="text-[9px] uppercase tracking-wide">Jul</span>
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-church-wood text-sm">Sunday Worship Service</h4>
-                            <p className="text-xs text-church-charcoal/70">Worship, Sermon by Pastor Thomas. Communion service.</p>
+                        <div className="space-y-4">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Pending Approvals ({profilesList.filter(p => !p.approved).length})</h4>
+                          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                            {profilesList.filter(p => !p.approved).length === 0 ? (
+                              <p className="text-xs text-church-charcoal/50 text-center py-2">No pending user registrations.</p>
+                            ) : (
+                              profilesList.filter(p => !p.approved).map((profile) => (
+                                <div key={profile.id} className="bg-church-bg p-3 rounded-lg border border-church-creamDark space-y-2 text-xs">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <span className="font-bold text-church-wood block">{profile.name}</span>
+                                      <span className="text-[10px] text-church-charcoal/50 block">Requested: {profile.role}</span>
+                                    </div>
+                                    <div className="flex space-x-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          const { error } = await supabase.from('profiles').delete().eq('id', profile.id);
+                                          if (error) alert(error.message);
+                                          else fetchProfiles();
+                                        }}
+                                        className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded cursor-pointer"
+                                        title="Deny / Delete"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          const { error } = await supabase.from('profiles').update({ approved: true }).eq('id', profile.id);
+                                          if (error) alert(error.message);
+                                          else fetchProfiles();
+                                        }}
+                                        className="p-1 bg-green-50 text-green-600 hover:bg-green-100 rounded cursor-pointer"
+                                        title="Approve User"
+                                      >
+                                        <Check className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                            )}
                           </div>
                         </div>
 
-                        <div className="flex space-x-3 text-sm">
-                          <div className="w-10 h-10 bg-church-creamDark/80 rounded-lg flex flex-col items-center justify-center font-bold text-church-wood shrink-0">
-                            <span className="text-xs leading-none">16</span>
-                            <span className="text-[9px] uppercase tracking-wide">Jul</span>
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-church-wood text-sm">Youth Leaders Bonfire</h4>
-                            <p className="text-xs text-church-charcoal/70">Team gathering and bonfire planning checkup.</p>
-                          </div>
-                        </div>
-
-                        <div className="flex space-x-3 text-sm">
-                          <div className="w-10 h-10 bg-church-creamDark/80 rounded-lg flex flex-col items-center justify-center font-bold text-church-wood shrink-0">
-                            <span className="text-xs leading-none">23</span>
-                            <span className="text-[9px] uppercase tracking-wide">Jul</span>
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-church-wood text-sm">Media & Audio Calibration</h4>
-                            <p className="text-xs text-church-charcoal/70">System testing and setup for winter concert preparations.</p>
+                        <div className="space-y-4 pt-2 border-t border-church-creamDark">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">All Approved Members ({profilesList.filter(p => p.approved).length})</h4>
+                          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                            {profilesList.filter(p => p.approved).map((profile) => (
+                              <div key={profile.id} className="flex justify-between items-center text-xs p-2 bg-church-bg/50 rounded-lg">
+                                <div>
+                                  <span className="font-semibold text-church-wood block">{profile.name}</span>
+                                  <span className="text-[10px] text-church-charcoal/50">{profile.role}</span>
+                                </div>
+                                {profile.email !== 'admin@pcgami.org' && (
+                                  <div className="flex space-x-1 items-center">
+                                    <select
+                                      value={profile.role}
+                                      onChange={async (e) => {
+                                        const newRole = e.target.value;
+                                        const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', profile.id);
+                                        if (error) alert(error.message);
+                                        else fetchProfiles();
+                                      }}
+                                      className="px-1.5 py-0.5 border border-church-creamDark rounded text-[10px] bg-white text-church-charcoal focus:outline-none"
+                                    >
+                                      <option value="Admin">Admin</option>
+                                      <option value="Pastor">Pastor</option>
+                                      <option value="Church Leader">Church Leader</option>
+                                      <option value="Youth Leader">Youth Leader</option>
+                                      <option value="Church Member">Church Member</option>
+                                      <option value="Young People">Young People</option>
+                                    </select>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const { error } = await supabase.from('profiles').update({ approved: false }).eq('id', profile.id);
+                                        if (error) alert(error.message);
+                                        else fetchProfiles();
+                                      }}
+                                      className="p-1 text-red-600 hover:bg-red-50 rounded cursor-pointer"
+                                      title="Revoke Access"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
-                    </div>
+                    )}
+
+                    {/* Sub-tab: Hero Slideshow Settings */}
+                    {portalSubTab === 'slideshow' && currentUser.role === 'Admin' && (
+                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
+                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
+                          <Upload className="w-6 h-6 text-church-gold" />
+                          <h3 className="font-serif text-2xl font-bold">Hero Slideshow</h3>
+                        </div>
+
+                        {/* Add new slide form */}
+                        <form
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            if (!newHeroUrl.trim()) return;
+
+                            const { error } = await supabase.from('hero_photos').insert([
+                              {
+                                url: newHeroUrl,
+                                caption: newHeroCaption,
+                                display_order: newHeroOrder
+                              }
+                            ]);
+
+                            if (error) {
+                              alert(error.message);
+                            } else {
+                              setNewHeroUrl('');
+                              setNewHeroCaption('');
+                              setNewHeroOrder(0);
+                              fetchHeroPhotos();
+                            }
+                          }}
+                          className="space-y-3"
+                        >
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Add New Slide</h4>
+                          <div>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Image URL (e.g. https://images.unsplash.com/...)"
+                              value={newHeroUrl}
+                              onChange={(e) => setNewHeroUrl(e.target.value)}
+                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <input
+                              type="text"
+                              placeholder="Caption"
+                              value={newHeroCaption}
+                              onChange={(e) => setNewHeroCaption(e.target.value)}
+                              className="col-span-2 px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
+                            />
+                            <input
+                              type="number"
+                              placeholder="Order"
+                              value={newHeroOrder}
+                              onChange={(e) => setNewHeroOrder(parseInt(e.target.value) || 0)}
+                              className="px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            className="w-full py-2 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded text-xs transition-all shadow cursor-pointer"
+                          >
+                            Add Slide Image
+                          </button>
+                        </form>
+
+                        {/* Current slides list */}
+                        <div className="space-y-4 pt-4 border-t border-church-creamDark">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Active Slides ({heroPhotos.length})</h4>
+                          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                            {heroPhotos.length === 0 ? (
+                              <p className="text-xs text-church-charcoal/50 text-center py-2">No custom slideshow images. Falling back to default cover.</p>
+                            ) : (
+                              heroPhotos.map((photo) => (
+                                <div key={photo.id} className="flex items-center space-x-3 p-2 bg-church-bg/50 rounded-lg text-xs">
+                                  <img
+                                    src={photo.url}
+                                    alt={photo.caption || 'Slide'}
+                                    className="w-12 h-12 object-cover rounded border border-church-creamDark"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1515162305285-0293e4767cc2?q=80&w=800';
+                                    }}
+                                  />
+                                  <div className="flex-grow min-w-0">
+                                    <span className="font-semibold text-xs text-church-wood block truncate">{photo.caption || 'No Caption'}</span>
+                                    <span className="text-[10px] text-church-charcoal/50 block">Order: {photo.display_order}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const { error } = await supabase.from('hero_photos').delete().eq('id', photo.id);
+                                      if (error) alert(error.message);
+                                      else fetchHeroPhotos();
+                                    }}
+                                    className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded cursor-pointer"
+                                    title="Delete Slide"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sub-tab: Church Schedules Management */}
+                    {portalSubTab === 'schedules' && ['Admin', 'Pastor', 'Church Leader'].includes(currentUser.role) && (
+                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
+                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
+                          <Calendar className="w-6 h-6 text-church-gold" />
+                          <h3 className="font-serif text-2xl font-bold">Church Schedules Manager</h3>
+                        </div>
+
+                        {/* Add new schedule form */}
+                        <form onSubmit={handleCreateSchedule} className="space-y-4">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Create New Schedule</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Title</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="e.g. Youth Fellowship Service"
+                                value={scheduleTitle}
+                                onChange={(e) => setScheduleTitle(e.target.value)}
+                                className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Event Date & Time</label>
+                              <input
+                                type="datetime-local"
+                                required
+                                value={scheduleDate}
+                                onChange={(e) => setScheduleDate(e.target.value)}
+                                className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Description / Notes</label>
+                            <textarea
+                              rows={2}
+                              placeholder="Describe the activity..."
+                              value={scheduleDescription}
+                              onChange={(e) => setScheduleDescription(e.target.value)}
+                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            className="w-full py-2 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded text-xs transition-all shadow cursor-pointer"
+                          >
+                            Add Activity Schedule
+                          </button>
+                        </form>
+
+                        {/* Current schedules list */}
+                        <div className="space-y-4 pt-4 border-t border-church-creamDark">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70 font-bold">Active Activity Schedules ({activitySchedulesList.length})</h4>
+                          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                            {activitySchedulesList.length === 0 ? (
+                              <p className="text-xs text-church-charcoal/50 text-center py-2">No activities scheduled.</p>
+                            ) : (
+                              activitySchedulesList.map((sched) => {
+                                const dateObj = new Date(sched.event_date);
+                                const isPinned = systemSettings?.pinned_event_id === sched.id;
+                                return (
+                                  <div key={sched.id} className={`flex items-start justify-between p-3 rounded-lg text-xs border transition-all duration-300 ${
+                                    isPinned 
+                                      ? 'bg-church-gold/10 border-church-gold shadow-sm animate-pulseFast' 
+                                      : 'bg-church-bg/50 border-church-creamDark/60'
+                                  }`}>
+                                    <div className="space-y-1">
+                                      <div className="flex items-center space-x-2">
+                                        <span className="font-semibold text-xs text-church-wood block">{sched.title}</span>
+                                        {isPinned && (
+                                          <span className="text-[9px] bg-church-gold text-church-wood font-bold px-1.5 py-0.5 rounded flex items-center space-x-0.5">
+                                            <span>⭐ Pinned Countdown</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                      {sched.description && <p className="text-[10px] text-church-charcoal/70">{sched.description}</p>}
+                                      <span className="inline-block text-[10px] text-church-goldDark bg-church-gold/10 px-2 py-0.5 rounded font-medium">
+                                        {dateObj.toLocaleDateString([], { dateStyle: 'medium' })} at {dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center space-x-2 self-center">
+                                      {currentUser.role === 'Admin' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handlePinEvent(isPinned ? null : sched.id)}
+                                          className={`p-1 rounded cursor-pointer transition-all duration-200 ${
+                                            isPinned 
+                                              ? 'bg-church-gold text-church-wood hover:bg-church-goldDark' 
+                                              : 'bg-church-creamDark hover:bg-church-gold/20 text-church-charcoal hover:text-church-goldDark'
+                                          }`}
+                                          title={isPinned ? "Unpin from countdown" : "Pin to countdown"}
+                                        >
+                                          ⭐
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteSchedule(sched.id)}
+                                        className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded cursor-pointer"
+                                        title="Delete Schedule"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sub-tab: System Settings (Landing Page Content) */}
+                    {portalSubTab === 'settings' && currentUser.role === 'Admin' && (
+                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
+                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
+                          <Shield className="w-6 h-6 text-church-gold" />
+                          <h3 className="font-serif text-2xl font-bold">System Settings</h3>
+                        </div>
+
+                        <form onSubmit={handleUpdateSettings} className="space-y-4">
+                          <div>
+                            <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Church Name</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. FOJ-PCGAMI Siay"
+                              value={editChurchName}
+                              onChange={(e) => setEditChurchName(e.target.value)}
+                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Banner Title</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Landing page main headline"
+                              value={editBannerTitle}
+                              onChange={(e) => setEditBannerTitle(e.target.value)}
+                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Banner Subtitle / Scripture</label>
+                            <textarea
+                              required
+                              rows={3}
+                              placeholder="Headline description or scripture passage"
+                              value={editBannerSubtitle}
+                              onChange={(e) => setEditBannerSubtitle(e.target.value)}
+                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
+                            />
+                          </div>
+
+
+
+                          <button
+                            type="submit"
+                            className="w-full py-2.5 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded text-xs transition-all shadow cursor-pointer animate-press"
+                          >
+                            Update Settings & Save Changes
+                          </button>
+                        </form>
+                      </div>
+                    )}
 
                   </div>
                 </div>
-
               </div>
             )}
           </div>
