@@ -68,6 +68,26 @@ export const CommunityChat: React.FC<CommunityChatProps> = ({
   const [attachedMedia, setAttachedMedia] = useState<{ type: 'image' | 'file'; url: string; fileName?: string } | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Mobile Touch Long Press State & Handlers
+  const [mobileActionMsg, setMobileActionMsg] = useState<ChatMessage | null>(null);
+  const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTouchStartMsg = (msg: ChatMessage) => {
+    longPressTimerRef.current = setTimeout(() => {
+      if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+        try { navigator.vibrate(45); } catch (e) { /* ignore */ }
+      }
+      setMobileActionMsg(msg);
+    }, 400);
+  };
+
+  const handleTouchEndMsg = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
   const channels = [
     { id: '#general-fellowship', name: 'General Fellowship', desc: 'Main community chat channel', avatar: '💬', badge: 'Public' },
     { id: '#worship-team', name: 'Worship Team', desc: 'Worship and music planning', avatar: '🎵', badge: 'Ministry' },
@@ -603,11 +623,16 @@ export const CommunityChat: React.FC<CommunityChatProps> = ({
                   </div>
 
                   {/* Message Bubble Container */}
-                  <div className={`relative group max-w-[85%] rounded-2xl p-3.5 shadow-xs transition-all duration-200 ${
-                    isSelf
-                      ? 'bg-church-wood text-white rounded-tr-none'
-                      : 'bg-white text-stone-800 border border-stone-200/80 rounded-tl-none'
-                  }`}>
+                  <div
+                    onTouchStart={() => handleTouchStartMsg(msg)}
+                    onTouchEnd={handleTouchEndMsg}
+                    onTouchMove={handleTouchEndMsg}
+                    className={`relative group max-w-[85%] rounded-2xl p-3.5 shadow-xs transition-all duration-200 select-none ${
+                      isSelf
+                        ? 'bg-church-wood text-white rounded-tr-none'
+                        : 'bg-white text-stone-800 border border-stone-200/80 rounded-tl-none'
+                    }`}
+                  >
 
                     {/* Reply To Quote Box */}
                     {msg.replyTo && (
@@ -878,6 +903,107 @@ export const CommunityChat: React.FC<CommunityChatProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Long Press Action Bottom Sheet */}
+      {mobileActionMsg && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end justify-center p-0 sm:p-4">
+          <div
+            className="fixed inset-0"
+            onClick={() => setMobileActionMsg(null)}
+          />
+
+          <div className="relative w-full max-w-lg bg-white rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl z-10 space-y-4 animate-in fade-in slide-in-from-bottom duration-200">
+            {/* Sheet Handle */}
+            <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto" />
+
+            {/* Message Preview */}
+            <div className="bg-stone-100/90 p-3 rounded-xl border border-stone-200/80">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-xs text-church-wood">{mobileActionMsg.sender}</span>
+                <span className="text-[10px] text-stone-400">{mobileActionMsg.timestamp}</span>
+              </div>
+              <p className="text-xs text-stone-700 line-clamp-2">{mobileActionMsg.text}</p>
+            </div>
+
+            {/* Quick Emoji Reactions Bar */}
+            <div>
+              <p className="text-[10px] uppercase font-bold text-stone-400 tracking-wider mb-2">React with Emoji</p>
+              <div className="flex items-center justify-between gap-1 bg-stone-50 p-2 rounded-xl border border-stone-200/60 overflow-x-auto">
+                {['🙏', '❤️', '🙌', '👏', '✝️', '💡', '😊', '🔥', '👍'].map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => {
+                      toggleReaction(mobileActionMsg.id, emoji);
+                      setMobileActionMsg(null);
+                    }}
+                    className="p-2 text-xl hover:scale-125 active:scale-95 transition-transform cursor-pointer"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Action Buttons List */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyTarget({ id: mobileActionMsg.id, sender: mobileActionMsg.sender, text: mobileActionMsg.text });
+                  setMobileActionMsg(null);
+                }}
+                className="w-full py-3 px-4 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold flex items-center gap-3 transition-colors cursor-pointer"
+              >
+                <Reply className="w-4 h-4 text-church-wood" />
+                <span>Reply to Message</span>
+              </button>
+
+              {handleTogglePinMessage && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleTogglePinMessage(mobileActionMsg.id);
+                    setMobileActionMsg(null);
+                  }}
+                  className="w-full py-3 px-4 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Pin className="w-4 h-4 text-amber-700" />
+                  <span>{mobileActionMsg.isPinned ? 'Unpin Message' : 'Pin Message to Top'}</span>
+                </button>
+              )}
+
+              {handleDeleteMessage && (
+                (mobileActionMsg.isSelf ||
+                 currentUser.role === 'Admin' ||
+                 mobileActionMsg.sender === currentUser.name ||
+                 mobileActionMsg.senderId === currentUser.id)
+              ) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDeleteMessage(mobileActionMsg.id);
+                    setMobileActionMsg(null);
+                  }}
+                  className="w-full py-3 px-4 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                  <span>Delete Message</span>
+                </button>
+              )}
+            </div>
+
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setMobileActionMsg(null)}
+              className="w-full py-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
