@@ -1,24 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Calendar,
   Upload,
   Users,
-  LogOut,
-  Send,
-  Check,
   X,
   ChevronRight,
   Heart,
   Info,
-  Shield,
-  BookOpen,
   Flame
 } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
-import { Analytics } from "@vercel/analytics/react"
+import { Analytics } from "@vercel/analytics/react";
+
+// Modular Components
+import { Toast } from './components/Toast';
+import { MobileBottomDock } from './components/MobileBottomDock';
+import { PortalSidebar } from './components/PortalSidebar';
+import { InvitationModal } from './components/InvitationModal';
+import { CommunityChat } from './components/portal/CommunityChat';
+import { ProfilePanel } from './components/portal/ProfilePanel';
+import { AnnouncementsPanel } from './components/portal/AnnouncementsPanel';
+import { UsersPanel } from './components/portal/UsersPanel';
+import { SettingsPanel } from './components/portal/SettingsPanel';
+import { RSVPPanel } from './components/portal/RSVPPanel';
 
 // Types
-interface UserProfile {
+export interface UserProfile {
   id: string;
   name: string;
   role: string;
@@ -26,14 +32,14 @@ interface UserProfile {
   email?: string;
 }
 
-interface HeroPhoto {
+export interface HeroPhoto {
   id: string;
   url: string;
   caption?: string;
   display_order: number;
 }
 
-interface Announcement {
+export interface Announcement {
   id: string;
   title: string;
   content: string;
@@ -41,7 +47,7 @@ interface Announcement {
   created_at: string;
 }
 
-interface ActivitySchedule {
+export interface ActivitySchedule {
   id: string;
   title: string;
   description: string;
@@ -49,7 +55,7 @@ interface ActivitySchedule {
   created_at: string;
 }
 
-interface SystemSettings {
+export interface SystemSettings {
   id: string;
   church_name: string;
   banner_title: string;
@@ -58,7 +64,7 @@ interface SystemSettings {
   updated_at: string;
 }
 
-interface RSVP {
+export interface RSVP {
   id: string;
   name: string;
   adults: number;
@@ -68,7 +74,7 @@ interface RSVP {
   timestamp: string;
 }
 
-interface GratitudeNote {
+export interface GratitudeNote {
   id: string;
   author: string;
   text: string;
@@ -76,7 +82,7 @@ interface GratitudeNote {
   approved: boolean;
 }
 
-interface Photo {
+export interface Photo {
   id: string;
   url: string;
   title: string;
@@ -85,15 +91,19 @@ interface Photo {
   likes: number;
 }
 
-interface ChatMessage {
+export interface ChatMessage {
   id: string;
   channel: string;
   sender: string;
   senderRole: string;
+  senderId?: string;
   text: string;
   timestamp: string;
   isSelf?: boolean;
   emojis?: string[];
+  replyTo?: { id: string; sender: string; text: string };
+  attachment?: { type: 'image' | 'file' | 'audio'; url: string; fileName?: string };
+  isPinned?: boolean;
 }
 
 // Initial Data
@@ -178,7 +188,9 @@ const INITIAL_CHAT: ChatMessage[] = [
     sender: 'Pastor Thomas',
     senderRole: 'Pastor',
     text: 'Welcome to our digital fellowship workspace! Looking forward to our joint planning for the Thanksgiving Celebration.',
-    timestamp: '10:15 AM'
+    timestamp: '10:15 AM',
+    isPinned: true,
+    emojis: ['🙏', '❤️']
   },
   {
     id: 'c2',
@@ -186,7 +198,8 @@ const INITIAL_CHAT: ChatMessage[] = [
     sender: 'Chloe Miller',
     senderRole: 'Musicians / Worship Team',
     text: 'Amen! The worship set list is finalized. We\'re blending some beautiful classic hymns with modern arrangements.',
-    timestamp: '10:20 AM'
+    timestamp: '10:20 AM',
+    emojis: ['🙌']
   },
   {
     id: 'c3',
@@ -194,7 +207,13 @@ const INITIAL_CHAT: ChatMessage[] = [
     sender: 'Chloe Miller',
     senderRole: 'Musicians / Worship Team',
     text: 'Hey team, rehearsal starts this Thursday at 7:00 PM. Please practice "Great Is Thy Faithfulness" in the key of D.',
-    timestamp: 'Yesterday'
+    timestamp: 'Yesterday',
+    isPinned: true,
+    attachment: {
+      type: 'file',
+      url: '#',
+      fileName: 'Worship_Setlist_Nov.pdf'
+    }
   },
   {
     id: 'c4',
@@ -210,7 +229,29 @@ const INITIAL_CHAT: ChatMessage[] = [
     sender: 'Ruth Bennett',
     senderRole: 'Youth Leaders',
     text: 'Friday Youth Night is bonfire themed. Make sure to bring s\'mores kits!',
-    timestamp: '3 hours ago'
+    timestamp: '3 hours ago',
+    attachment: {
+      type: 'image',
+      url: 'https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=800'
+    }
+  },
+  {
+    id: 'c6',
+    channel: '#prayer-requests',
+    sender: 'Sister Evelyn',
+    senderRole: 'Church Member',
+    text: 'Please pray for my sister Grace who is undergoing surgery tomorrow morning. Standing on God\'s promises!',
+    timestamp: '1 hour ago',
+    isPinned: true,
+    emojis: ['🙏', '❤️', '🙌']
+  },
+  {
+    id: 'dm-pastor-thomas',
+    channel: 'dm-pastor-thomas',
+    sender: 'Pastor Thomas',
+    senderRole: 'Pastor',
+    text: 'Shalom! Thank you for your dedication to the church ministry. Let me know if you ever need prayer or counseling.',
+    timestamp: '9:30 AM'
   }
 ];
 
@@ -238,7 +279,7 @@ const INITIAL_RSVPS: RSVP[] = [
 export default function App() {
   // Navigation & Page State
   const [activeTab, setActiveTab] = useState<'home' | 'gallery' | 'portal'>('home');
-  const [portalSubTab, setPortalSubTab] = useState<'chat' | 'announcements' | 'rsvp' | 'users' | 'slideshow' | 'settings' | 'schedules'>('chat');
+  const [portalSubTab, setPortalSubTab] = useState<'chat' | 'announcements' | 'rsvp' | 'users' | 'slideshow' | 'settings' | 'schedules' | 'profile'>('chat');
   const [urlFamilyName, setUrlFamilyName] = useState<string | null>(null);
 
   // Modals & Lights
@@ -263,12 +304,34 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authName, setAuthName] = useState('');
   const [authEmail, setAuthEmail] = useState('');
-  const [authRole, setAuthRole] = useState('Church Member');
+  const authRole = 'Church Member';
   const [authPassword, setAuthPassword] = useState('');
 
   // Real DB Auth States
   const [profilesList, setProfilesList] = useState<UserProfile[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
+
+  // Toast System
+  interface ToastItem {
+    id: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+    title?: string;
+  }
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const justRegisteredRef = useRef(false);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', title?: string) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts((prev) => [...prev, { id, message, type, title }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 6000);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
   // Hero Slideshow States
   const [heroPhotos, setHeroPhotos] = useState<HeroPhoto[]>([]);
@@ -406,7 +469,12 @@ export default function App() {
 
       if (data) {
         if (!data.approved) {
-          alert('Your account is pending approval by the Admin.');
+          if (!justRegisteredRef.current) {
+            showToast('Your account is pending approval by the Admin.', 'info', 'Account Status');
+          } else {
+            // Reset the ref since we are skipping the redundant message
+            justRegisteredRef.current = false;
+          }
           await supabase.auth.signOut();
           setCurrentUser(null);
         } else {
@@ -417,6 +485,11 @@ export default function App() {
             approved: data.approved,
             email: email
           });
+          if (data.role === 'Admin' || data.role === 'Pastor') {
+            setPortalSubTab('rsvp');
+          } else {
+            setPortalSubTab('announcements');
+          }
         }
       }
     } catch (err) {
@@ -426,21 +499,21 @@ export default function App() {
     }
   };
 
-  // Fetch all profiles for Admin
+  // Fetch profiles for messaging and member directory
   const fetchProfiles = React.useCallback(async () => {
-    if (currentUser?.role === 'Admin') {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
-        setProfilesList(data);
-      }
+    if (!currentUser) return;
+    let query = supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    if (currentUser.role !== 'Admin') {
+      query = query.eq('approved', true);
+    }
+    const { data, error } = await query;
+    if (!error && data) {
+      setProfilesList(data);
     }
   }, [currentUser]);
 
   useEffect(() => {
-    if (currentUser?.role === 'Admin') {
+    if (currentUser) {
       fetchProfiles();
     } else {
       setProfilesList([]);
@@ -462,9 +535,9 @@ export default function App() {
       .eq('id', 'general');
 
     if (error) {
-      alert('Error updating settings: ' + error.message);
+      showToast('Error updating settings: ' + error.message, 'error', 'Settings Error');
     } else {
-      alert('System Settings updated successfully!');
+      showToast('System Settings updated successfully!', 'success', 'Settings Updated');
       fetchSystemSettings();
     }
   };
@@ -483,9 +556,9 @@ export default function App() {
       });
 
     if (error) {
-      alert('Error creating announcement: ' + error.message);
+      showToast('Error creating announcement: ' + error.message, 'error', 'Error');
     } else {
-      alert('Announcement posted successfully!');
+      showToast('Announcement posted successfully!', 'success', 'Success');
       setAnnouncementTitle('');
       setAnnouncementContent('');
       fetchAnnouncements();
@@ -502,8 +575,9 @@ export default function App() {
       .eq('id', id);
 
     if (error) {
-      alert('Error deleting announcement: ' + error.message);
+      showToast('Error deleting announcement: ' + error.message, 'error', 'Error');
     } else {
+      showToast('Announcement deleted successfully!', 'success', 'Success');
       fetchAnnouncements();
     }
   };
@@ -522,9 +596,9 @@ export default function App() {
       });
 
     if (error) {
-      alert('Error creating schedule: ' + error.message);
+      showToast('Error creating schedule: ' + error.message, 'error', 'Error');
     } else {
-      alert('Activity schedule created successfully!');
+      showToast('Activity schedule created successfully!', 'success', 'Success');
       setScheduleTitle('');
       setScheduleDescription('');
       setScheduleDate('');
@@ -542,8 +616,9 @@ export default function App() {
       .eq('id', id);
 
     if (error) {
-      alert('Error deleting schedule: ' + error.message);
+      showToast('Error deleting schedule: ' + error.message, 'error', 'Error');
     } else {
+      showToast('Activity schedule deleted successfully!', 'success', 'Success');
       fetchActivitySchedules();
     }
   };
@@ -559,8 +634,9 @@ export default function App() {
       .eq('id', 'general');
 
     if (error) {
-      alert('Error updating pinned event: ' + error.message);
+      showToast('Error updating pinned event: ' + error.message, 'error', 'Error');
     } else {
+      showToast('Pinned event updated successfully!', 'success', 'Success');
       fetchSystemSettings();
     }
   };
@@ -569,6 +645,8 @@ export default function App() {
   const [activeChannel, setActiveChannel] = useState('#general-fellowship');
   const [newMessage, setNewMessage] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [mobileChatView, setMobileChatView] = useState<'list' | 'chat'>('list');
 
   // Image Upload state
   const [uploadTitle, setUploadTitle] = useState('');
@@ -597,7 +675,7 @@ export default function App() {
 
 
 
-  const pinnedEvent = systemSettings?.pinned_event_id 
+  const pinnedEvent = systemSettings?.pinned_event_id
     ? activitySchedulesList.find(e => e.id === systemSettings.pinned_event_id)
     : null;
 
@@ -630,10 +708,26 @@ export default function App() {
     return () => clearInterval(interval);
   }, [pinnedEvent]);
 
-  // Scroll chat to bottom when channel or messages change
+  // Refs for tracking channel & message state to prevent unnecessary scrolling
+  const lastChannelRef = useRef(activeChannel);
+  const lastMsgIdRef = useRef<string | null>(null);
+
+  // Scroll chat to bottom ONLY when channel changes or a new message arrives
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages, activeChannel, activeTab]);
+    const currentChannelMsgs = chatMessages.filter(m => m.channel === activeChannel);
+    const lastMsg = currentChannelMsgs[currentChannelMsgs.length - 1];
+    const lastMsgId = lastMsg?.id || null;
+
+    const channelChanged = lastChannelRef.current !== activeChannel;
+    const newMsgArrived = Boolean(lastMsgId && lastMsgId !== lastMsgIdRef.current);
+
+    lastChannelRef.current = activeChannel;
+    lastMsgIdRef.current = lastMsgId;
+
+    if (channelChanged || newMsgArrived) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, activeChannel]);
 
   // Handle RSVP and Gratitude Submission
   const handleRSVPSubmit = (e: React.FormEvent) => {
@@ -671,7 +765,7 @@ export default function App() {
     setRsvpNote('');
     setShowInvitationModal(false);
 
-    alert('Thank you! Your RSVP has been submitted and is sent to the volunteer planning teams.');
+    showToast('Thank you! Your RSVP has been submitted and is sent to the volunteer planning teams.', 'success', 'RSVP Submitted');
   };
 
   // Toggle volunteer checkbox
@@ -689,6 +783,8 @@ export default function App() {
     if (authMode === 'register') {
       if (!authName || !authEmail || !authPassword) return;
 
+      justRegisteredRef.current = true;
+
       const { error } = await supabase.auth.signUp({
         email: authEmail,
         password: authPassword,
@@ -701,9 +797,10 @@ export default function App() {
       });
 
       if (error) {
-        alert(error.message);
+        justRegisteredRef.current = false;
+        showToast(error.message, 'error', 'Registration Error');
       } else {
-        alert('Registration successful! Your account is pending admin approval.');
+        showToast('Registration successful! Your account is pending admin approval.', 'success', 'Welcome!');
         setAuthMode('login');
       }
     } else {
@@ -714,7 +811,7 @@ export default function App() {
       });
 
       if (error) {
-        alert(error.message);
+        showToast(error.message, 'error', 'Login Error');
       }
     }
     // Clear forms
@@ -723,23 +820,185 @@ export default function App() {
     setAuthPassword('');
   };
 
-  // Send Message
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !currentUser) return;
+  // Helper to broadcast message updates across open tabs and windows
+  const broadcastSync = (messagesList: ChatMessage[]) => {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const channel = new BroadcastChannel('pcgami_chat_sync');
+        channel.postMessage({ type: 'SYNC_MESSAGES', messages: messagesList });
+        channel.close();
+      } catch (e) {
+        // ignore fallback
+      }
+    }
+  };
 
-    const msg: ChatMessage = {
+  // Fetch and sync Chat Messages from Supabase DB & LocalStorage
+  const fetchMessages = React.useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        const mapped: ChatMessage[] = data.map(m => ({
+          id: String(m.id),
+          channel: m.channel,
+          sender: m.sender,
+          senderRole: m.sender_role || 'Church Member',
+          senderId: m.sender_id,
+          text: m.text || '',
+          timestamp: m.created_at
+            ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          created_at: m.created_at,
+          emojis: m.emojis || [],
+          replyTo: m.reply_to || undefined,
+          attachment: m.attachment || undefined,
+          isPinned: m.is_pinned || false
+        }));
+        setChatMessages(prev => {
+          if (
+            prev.length === mapped.length &&
+            prev.every((msg, i) =>
+              msg.id === mapped[i].id &&
+              msg.text === mapped[i].text &&
+              msg.isPinned === mapped[i].isPinned &&
+              (msg.emojis || []).length === (mapped[i].emojis || []).length
+            )
+          ) {
+            return prev;
+          }
+          localStorage.setItem('pcgami_chat_messages', JSON.stringify(mapped));
+          return mapped;
+        });
+      } else {
+        const cached = localStorage.getItem('pcgami_chat_messages');
+        if (cached) {
+          try {
+            setChatMessages(JSON.parse(cached));
+          } catch (e) {
+            setChatMessages(INITIAL_CHAT);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching messages from Supabase, using cache or initial:', err);
+      const cached = localStorage.getItem('pcgami_chat_messages');
+      if (cached) {
+        try {
+          setChatMessages(JSON.parse(cached));
+        } catch (e) {
+          setChatMessages(INITIAL_CHAT);
+        }
+      }
+    }
+  }, []);
+
+  // BroadcastChannel & LocalStorage Event Listeners for instant live tab sync
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let bc: BroadcastChannel | null = null;
+    if ('BroadcastChannel' in window) {
+      bc = new BroadcastChannel('pcgami_chat_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'SYNC_MESSAGES' && Array.isArray(event.data?.messages)) {
+          setChatMessages(event.data.messages);
+        } else if (event.data?.type === 'REFETCH') {
+          fetchMessages();
+        }
+      };
+    }
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'pcgami_chat_messages' && e.newValue) {
+        try {
+          setChatMessages(JSON.parse(e.newValue));
+        } catch (err) {
+          // ignore
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [fetchMessages]);
+
+  // Realtime WebSocket Subscription & Fast Polling Engine (2.5s)
+  useEffect(() => {
+    fetchMessages();
+
+    // 1. Supabase Postgres Realtime Subscription
+    const channel = supabase
+      .channel('public:messages')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages' },
+        () => {
+          fetchMessages();
+        }
+      )
+      .subscribe();
+
+    // 2. High-Frequency Polling fallback (2.5 seconds) to ensure live sync without browser refresh
+    const interval = setInterval(() => {
+      fetchMessages();
+    }, 2500);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
+  }, [fetchMessages]);
+
+  // Send Message with Supabase & Live Persistence
+  const handleSendMessage = async (e?: React.FormEvent, customMsg?: ChatMessage) => {
+    if (e) e.preventDefault();
+    if (!currentUser && !customMsg) return;
+
+    const msgToSend: ChatMessage = customMsg || {
       id: 'c_' + Date.now(),
       channel: activeChannel,
-      sender: currentUser.name,
-      senderRole: currentUser.role,
-      text: newMessage,
+      sender: currentUser?.name || 'Anonymous',
+      senderRole: currentUser?.role || 'Church Member',
+      senderId: currentUser?.id,
+      text: newMessage.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isSelf: true
     };
 
-    setChatMessages([...chatMessages, msg]);
+    if (!msgToSend.text && !msgToSend.attachment) return;
+
+    setChatMessages(prev => {
+      const updated = [...prev, msgToSend];
+      localStorage.setItem('pcgami_chat_messages', JSON.stringify(updated));
+      broadcastSync(updated);
+      return updated;
+    });
     setNewMessage('');
+
+    try {
+      await supabase.from('messages').insert({
+        channel: msgToSend.channel,
+        sender_id: currentUser?.id || msgToSend.senderId || null,
+        sender: msgToSend.sender,
+        sender_role: msgToSend.senderRole,
+        text: msgToSend.text,
+        emojis: msgToSend.emojis || [],
+        reply_to: msgToSend.replyTo || null,
+        attachment: msgToSend.attachment || null,
+        is_pinned: msgToSend.isPinned || false
+      });
+      fetchMessages();
+    } catch (err) {
+      console.warn('Supabase insert message error:', err);
+    }
   };
 
   // Add emoji to message input
@@ -748,18 +1007,85 @@ export default function App() {
   };
 
   // Message Reaction Toggle
-  const toggleReaction = (msgId: string, emoji: string) => {
-    setChatMessages(prev => prev.map(msg => {
-      if (msg.id === msgId) {
-        const currentEmojis = msg.emojis || [];
-        if (currentEmojis.includes(emoji)) {
-          return { ...msg, emojis: currentEmojis.filter(e => e !== emoji) };
-        } else {
-          return { ...msg, emojis: [...currentEmojis, emoji] };
+  const toggleReaction = async (msgId: string, emoji: string) => {
+    let targetMsg: ChatMessage | undefined;
+    setChatMessages(prev => {
+      const updated = prev.map(msg => {
+        if (msg.id === msgId) {
+          const currentEmojis = msg.emojis || [];
+          const newEmojis = currentEmojis.includes(emoji)
+            ? currentEmojis.filter(e => e !== emoji)
+            : [...currentEmojis, emoji];
+          targetMsg = { ...msg, emojis: newEmojis };
+          return targetMsg;
         }
+        return msg;
+      });
+      localStorage.setItem('pcgami_chat_messages', JSON.stringify(updated));
+      broadcastSync(updated);
+      return updated;
+    });
+
+    if (targetMsg && !targetMsg.id.startsWith('c_')) {
+      try {
+        await supabase
+          .from('messages')
+          .update({ emojis: targetMsg.emojis })
+          .eq('id', targetMsg.id);
+      } catch (err) {
+        console.warn('Error updating reactions in Supabase:', err);
       }
-      return msg;
-    }));
+    }
+  };
+
+  // Delete Message
+  const handleDeleteMessage = async (msgId: string) => {
+    setChatMessages(prev => {
+      const updated = prev.filter(m => m.id !== msgId);
+      localStorage.setItem('pcgami_chat_messages', JSON.stringify(updated));
+      broadcastSync(updated);
+      return updated;
+    });
+    showToast('Message deleted', 'info');
+
+    if (!msgId.startsWith('c_')) {
+      try {
+        await supabase.from('messages').delete().eq('id', msgId);
+      } catch (err) {
+        console.warn('Error deleting message from Supabase:', err);
+      }
+    }
+  };
+
+  // Toggle Pin Message
+  const handleTogglePinMessage = async (msgId: string) => {
+    let updatedState = false;
+    setChatMessages(prev => {
+      const updated = prev.map(m => {
+        if (m.id === msgId) {
+          const isPinned = !m.isPinned;
+          updatedState = isPinned;
+          return { ...m, isPinned };
+        }
+        return m;
+      });
+      localStorage.setItem('pcgami_chat_messages', JSON.stringify(updated));
+      broadcastSync(updated);
+      return updated;
+    });
+
+    showToast(updatedState ? 'Message pinned to top' : 'Message unpinned', 'info');
+
+    if (!msgId.startsWith('c_')) {
+      try {
+        await supabase
+          .from('messages')
+          .update({ is_pinned: updatedState })
+          .eq('id', msgId);
+      } catch (err) {
+        console.warn('Error toggling pin in Supabase:', err);
+      }
+    }
   };
 
   // File drop/upload mock logic
@@ -829,8 +1155,8 @@ export default function App() {
                 {systemSettings?.church_name ? systemSettings.church_name.split('-')[0] : 'FOJ'}
               </span>
               <span className="text-[10px] uppercase tracking-widest text-church-gold font-bold block">
-                {systemSettings?.church_name && systemSettings.church_name.includes('-') 
-                  ? systemSettings.church_name.substring(systemSettings.church_name.indexOf('-') + 1) 
+                {systemSettings?.church_name && systemSettings.church_name.includes('-')
+                  ? systemSettings.church_name.substring(systemSettings.church_name.indexOf('-') + 1)
                   : systemSettings?.church_name || 'PCGAMI Siay'}
               </span>
             </div>
@@ -841,8 +1167,8 @@ export default function App() {
             <button
               onClick={() => setActiveTab('home')}
               className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-300 ${activeTab === 'home'
-                  ? 'bg-church-wood text-church-bg shadow-sm'
-                  : 'text-church-charcoal/80 hover:text-church-wood hover:bg-church-creamDark/50'
+                ? 'bg-church-wood text-church-bg shadow-sm'
+                : 'text-church-charcoal/80 hover:text-church-wood hover:bg-church-creamDark/50'
                 }`}
             >
               Home
@@ -850,8 +1176,8 @@ export default function App() {
             <button
               onClick={() => setActiveTab('gallery')}
               className={`px-4 py-2 rounded-full font-medium text-sm transition-all duration-300 ${activeTab === 'gallery'
-                  ? 'bg-church-wood text-church-bg shadow-sm'
-                  : 'text-church-charcoal/80 hover:text-church-wood hover:bg-church-creamDark/50'
+                ? 'bg-church-wood text-church-bg shadow-sm'
+                : 'text-church-charcoal/80 hover:text-church-wood hover:bg-church-creamDark/50'
                 }`}
             >
               Gallery
@@ -859,8 +1185,8 @@ export default function App() {
             <button
               onClick={() => setActiveTab('portal')}
               className={`px-4 py-2 rounded-full font-medium text-sm flex items-center space-x-1.5 transition-all duration-300 ${activeTab === 'portal'
-                  ? 'bg-church-wood text-church-bg shadow-sm'
-                  : 'text-church-charcoal/80 hover:text-church-wood hover:bg-church-creamDark/50'
+                ? 'bg-church-wood text-church-bg shadow-sm'
+                : 'text-church-charcoal/80 hover:text-church-wood hover:bg-church-creamDark/50'
                 }`}
             >
               <Users className="w-4 h-4" />
@@ -984,7 +1310,7 @@ export default function App() {
             <div className="bg-church-creamDark/30 py-16 border-b border-church-creamDark/60">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                  
+
                   {/* Left Column: Announcements */}
                   <div className="space-y-8">
                     <div className="border-b border-church-creamDark pb-4 flex items-center justify-between">
@@ -1235,8 +1561,8 @@ export default function App() {
                     <button
                       onClick={() => setAuthMode('login')}
                       className={`flex-1 py-2 text-center text-sm font-semibold rounded-md transition-all ${authMode === 'login'
-                          ? 'bg-white text-church-wood shadow-sm'
-                          : 'text-church-charcoal/60 hover:text-church-wood'
+                        ? 'bg-white text-church-wood shadow-sm'
+                        : 'text-church-charcoal/60 hover:text-church-wood'
                         }`}
                     >
                       Login
@@ -1244,8 +1570,8 @@ export default function App() {
                     <button
                       onClick={() => setAuthMode('register')}
                       className={`flex-1 py-2 text-center text-sm font-semibold rounded-md transition-all ${authMode === 'register'
-                          ? 'bg-white text-church-wood shadow-sm'
-                          : 'text-church-charcoal/60 hover:text-church-wood'
+                        ? 'bg-white text-church-wood shadow-sm'
+                        : 'text-church-charcoal/60 hover:text-church-wood'
                         }`}
                     >
                       Register
@@ -1279,23 +1605,7 @@ export default function App() {
                       />
                     </div>
 
-                    {authMode === 'register' && (
-                      <div>
-                        <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Ministry Role / Title</label>
-                        <select
-                          value={authRole}
-                          onChange={(e) => setAuthRole(e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold bg-white"
-                        >
-                          <option value="Admin">Admin</option>
-                          <option value="Pastor">Pastor</option>
-                          <option value="Church Leader">Church Leader</option>
-                          <option value="Youth Leader">Youth Leader</option>
-                          <option value="Church Member">Church Member</option>
-                          <option value="Young People">Young People</option>
-                        </select>
-                      </div>
-                    )}
+
 
                     <div>
                       <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Password</label>
@@ -1317,15 +1627,7 @@ export default function App() {
                     </button>
                   </form>
 
-                  {/* Help box */}
-                  <div className="mt-6 p-4 bg-church-creamDark/40 rounded-xl border border-church-gold/20 text-xs text-church-charcoal/80 space-y-1">
-                    <span className="font-bold flex items-center text-church-wood">
-                      <Shield className="w-3.5 h-3.5 mr-1 text-church-goldDark" />
-                      Prototype Helper Tips:
-                    </span>
-                    <p>• To test **Pastor / Admin** view, log in with an email containing `pastor` or `admin`.</p>
-                    <p>• Other roles like `worship`, `media`, or `youth` will unlock appropriate portal access levels.</p>
-                  </div>
+
                 </div>
               </div>
             ) : (
@@ -1334,889 +1636,138 @@ export default function App() {
               <div className="space-y-8">
 
                 {/* User Greeting & Header */}
-                <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-church-creamDark flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-14 h-14 rounded-full bg-church-gold/20 flex items-center justify-center text-church-goldDark font-bold text-xl uppercase">
+                <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-church-creamDark flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-church-gold/20 flex items-center justify-center text-church-goldDark font-bold text-lg sm:text-xl uppercase shrink-0">
                       {currentUser.name.substring(0, 2)}
                     </div>
-                    <div>
-                      <h2 className="font-serif text-3xl font-bold text-church-wood">Shalom, {currentUser.name}!</h2>
-                      <div className="flex items-center space-x-2 text-sm text-church-charcoal/70">
-                        <span className="px-2.5 py-0.5 bg-church-creamDark text-church-wood rounded-full text-xs font-semibold">
+                    <div className="min-w-0">
+                      <h2 className="font-serif text-xl sm:text-2xl font-bold text-church-wood truncate">Shalom, {currentUser.name}!</h2>
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm text-church-charcoal/70">
+                        <span className="px-2 py-0.5 bg-church-creamDark text-church-wood rounded-full text-[10px] sm:text-xs font-semibold shrink-0">
                           {currentUser.role}
                         </span>
-                        <span>•</span>
-                        <span>Welcome back to fellowship.</span>
+                        <span className="hidden sm:inline text-church-charcoal/30">•</span>
+                        <span className="truncate">Welcome back to fellowship.</span>
                       </div>
                     </div>
                   </div>
-
-                  <button
-                    onClick={() => supabase.auth.signOut()}
-                    className="flex items-center space-x-1.5 px-4 py-2 border border-church-creamDark text-church-charcoal/80 hover:text-red-600 hover:bg-red-50 rounded-lg text-sm transition-all"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Log Out</span>
-                  </button>
                 </div>
                 {/* Portal Content Layout */}
-                <div className="flex flex-col lg:flex-row gap-8">
-                  
-                  {/* Left Column: Navigation Sidebar */}
-                  <div className="w-full lg:w-64 flex-shrink-0">
-                    <div className="bg-white rounded-2xl border border-church-creamDark/80 p-4 space-y-1 lg:sticky lg:top-8 shadow-sm">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-church-charcoal/50 px-3 mb-3">Portal Menu</h3>
-                      
-                      <button 
-                        type="button"
-                        onClick={() => setPortalSubTab('chat')}
-                        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                          portalSubTab === 'chat' 
-                            ? 'bg-church-wood text-white shadow-sm' 
-                            : 'text-church-charcoal hover:bg-church-creamDark/40'
-                        }`}
-                      >
-                        <span className="text-base">💬</span>
-                        <span>Community Chat</span>
-                      </button>
+                <div className="flex flex-col lg:flex-row gap-8 pb-20 lg:pb-0">
 
-                      <button 
-                        type="button"
-                        onClick={() => setPortalSubTab('announcements')}
-                        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                          portalSubTab === 'announcements' 
-                            ? 'bg-church-wood text-white shadow-sm' 
-                            : 'text-church-charcoal hover:bg-church-creamDark/40'
-                        }`}
-                      >
-                        <span className="text-base">📢</span>
-                        <span>Announcements</span>
-                      </button>
-
-                      {(currentUser.role === 'Admin' || currentUser.role === 'Pastor') && (
-                        <button 
-                          type="button"
-                          onClick={() => setPortalSubTab('rsvp')}
-                          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                            portalSubTab === 'rsvp' 
-                              ? 'bg-church-wood text-white shadow-sm' 
-                              : 'text-church-charcoal hover:bg-church-creamDark/40'
-                          }`}
-                        >
-                          <span className="text-base">📊</span>
-                          <span>RSVP & Volunteers</span>
-                        </button>
-                      )}
-
-                      {(currentUser.role === 'Admin' || currentUser.role === 'Pastor' || currentUser.role === 'Church Leader') && (
-                        <button 
-                          type="button"
-                          onClick={() => setPortalSubTab('schedules')}
-                          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                            portalSubTab === 'schedules' 
-                              ? 'bg-church-wood text-white shadow-sm' 
-                              : 'text-church-charcoal hover:bg-church-creamDark/40'
-                          }`}
-                        >
-                          <span className="text-base">📅</span>
-                          <span>Church Schedules</span>
-                        </button>
-                      )}
-
-                      {currentUser.role === 'Admin' && (
-                        <>
-                          <button 
-                            type="button"
-                            onClick={() => setPortalSubTab('users')}
-                            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                              portalSubTab === 'users' 
-                                ? 'bg-church-wood text-white shadow-sm' 
-                                : 'text-church-charcoal hover:bg-church-creamDark/40'
-                            }`}
-                          >
-                            <span className="text-base">👥</span>
-                            <span>User Approvals</span>
-                          </button>
-
-                          <button 
-                            type="button"
-                            onClick={() => setPortalSubTab('slideshow')}
-                            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                              portalSubTab === 'slideshow' 
-                                ? 'bg-church-wood text-white shadow-sm' 
-                                : 'text-church-charcoal hover:bg-church-creamDark/40'
-                            }`}
-                          >
-                            <span className="text-base">🖼️</span>
-                            <span>Hero Slideshow</span>
-                          </button>
-
-                          <button 
-                            type="button"
-                            onClick={() => setPortalSubTab('settings')}
-                            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                              portalSubTab === 'settings' 
-                                ? 'bg-church-wood text-white shadow-sm' 
-                                : 'text-church-charcoal hover:bg-church-creamDark/40'
-                            }`}
-                          >
-                            <span className="text-base">⚙️</span>
-                            <span>System Settings</span>
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                  {/* Left Column: Navigation Sidebar (Desktop only) */}
+                  <PortalSidebar
+                    currentUser={currentUser}
+                    portalSubTab={portalSubTab}
+                    setPortalSubTab={setPortalSubTab}
+                    onLogout={() => supabase.auth.signOut()}
+                  />
 
                   {/* Right Column: Dynamic Sub-tab Panel */}
                   <div className="flex-grow space-y-8">
-                    
-                    {/* Welcome Notice Card (Always visible at top of Dashboard) */}
-                    <div className="bg-gradient-to-br from-church-wood to-church-charcoal text-white p-8 rounded-2xl shadow-md relative overflow-hidden">
-                      <div className="absolute top-0 right-0 w-48 h-48 bg-church-gold/15 rounded-full blur-2xl pointer-events-none"></div>
-                      <div className="relative z-10 space-y-4">
-                        <h3 className="font-serif text-2xl font-bold text-church-goldLight">Ministry Hub Notes</h3>
-                        
-                        {currentUser.role === 'Admin' && (
-                          <p className="text-sm text-white/95 leading-relaxed">
-                            Hello Administrator. You have full system oversight. You can approve or revoke member access, modify user roles, and review gratitude notes.
-                          </p>
-                        )}
-                        {currentUser.role === 'Pastor' && (
-                          <p className="text-sm text-white/95 leading-relaxed">
-                            Hello Pastor. Welcome back. You have access to thanksgiving RSVP tally sheets, volunteer arrangements, and gratitude notes.
-                          </p>
-                        )}
-                        {currentUser.role === 'Church Leader' && (
-                          <p className="text-sm text-white/95 leading-relaxed">
-                            Greetings, Church Leader. You can view schedules, join fellowship channels, and share guidelines for ministry work.
-                          </p>
-                        )}
-                        {currentUser.role === 'Youth Leader' && (
-                          <p className="text-sm text-white/95 leading-relaxed">
-                            Youth Team Leader: Let us continue to guide and mentor our youth with passion. Coordinate bonfire nights and fellowships in the chat channels.
-                          </p>
-                        )}
-                        {currentUser.role === 'Young People' && (
-                          <p className="text-sm text-white/95 leading-relaxed">
-                            Hey! Glad to have you in the fellowship. Feel free to chat with your friends and join the Youth Activities.
-                          </p>
-                        )}
-                        {currentUser.role === 'Church Member' && (
-                          <p className="text-sm text-white/95 leading-relaxed">
-                            Dear Church Member: Thank you for being a part of the fellowship. You can upload photo memories to the gallery and participate in fellowship channels.
-                          </p>
-                        )}
-                      </div>
-                    </div>
+
+
 
                     {/* Sub-tab: Community Chat */}
                     {portalSubTab === 'chat' && (
-                      <div className="bg-white rounded-2xl border border-church-creamDark shadow-md flex flex-col h-[550px] overflow-hidden">
-                        {/* Chat Header */}
-                        <div className="bg-church-creamDark/50 px-6 py-4 border-b border-church-creamDark flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
-                            <span className="font-serif font-bold text-church-wood text-lg">{activeChannel}</span>
-                          </div>
-                          <span className="text-xs text-church-charcoal/60">Active Channel Chat</span>
-                        </div>
-
-                        {/* Chat Body Grid */}
-                        <div className="flex-grow flex overflow-hidden">
-                          {/* Chat Sidebar Channels */}
-                          <div className="w-1/3 sm:w-1/4 border-r border-church-creamDark bg-church-bg/30 p-3 space-y-4 overflow-y-auto">
-                            <div className="space-y-1">
-                              <span className="text-[10px] uppercase font-bold text-church-charcoal/50 tracking-widest block px-2 mb-2">Channels</span>
-                              {[
-                                '#general-fellowship',
-                                '#worship-team',
-                                '#media-team',
-                                '#youth-leaders'
-                              ].map((chan) => (
-                                <button
-                                  key={chan}
-                                  type="button"
-                                  onClick={() => setActiveChannel(chan)}
-                                  className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${activeChannel === chan
-                                      ? 'bg-church-wood text-white shadow-sm'
-                                      : 'text-church-charcoal hover:bg-church-creamDark'
-                                    }`}
-                                >
-                                  {chan}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Chat Message Stream */}
-                          <div className="w-2/3 sm:w-3/4 flex flex-col bg-white overflow-hidden">
-                            <div className="flex-grow p-4 overflow-y-auto space-y-4">
-                              {chatMessages
-                                .filter(msg => msg.channel === activeChannel)
-                                .map((msg) => (
-                                  <div key={msg.id} className={`flex flex-col ${msg.isSelf ? 'items-end' : 'items-start'}`}>
-                                    <div className="flex items-center space-x-1.5 mb-1">
-                                      <span className="text-[10px] font-bold text-church-wood">{msg.sender}</span>
-                                      <span className="text-[8px] bg-church-creamDark px-1.5 py-0.5 rounded text-church-charcoal/70 uppercase scale-90">{msg.senderRole.split(' / ')[0]}</span>
-                                      <span className="text-[8px] text-church-charcoal/40">{msg.timestamp}</span>
-                                    </div>
-
-                                    {/* Chat bubble - coloring based on sender */}
-                                    <div className={`relative group max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm transition-all duration-200 ${msg.isSelf
-                                        ? 'bg-church-wood text-white rounded-tr-none'
-                                        : 'bg-church-creamDark/70 text-church-charcoal rounded-tl-none'
-                                      }`}>
-                                      <p className="leading-relaxed">{msg.text}</p>
-
-                                      {/* Emojis Reactions list */}
-                                      {msg.emojis && msg.emojis.length > 0 && (
-                                        <div className="flex items-center space-x-1 mt-1">
-                                          {msg.emojis.map((emoji, i) => (
-                                            <span key={i} className="text-xs bg-white/20 px-1 rounded">{emoji}</span>
-                                          ))}
-                                        </div>
-                                      )}
-
-                                      {/* Quick Hover Reactions */}
-                                      <div className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-church-creamDark shadow-md rounded-full px-2 py-1 flex items-center space-x-1 z-10 ${msg.isSelf ? '-left-20' : '-right-20'
-                                        }`}>
-                                        {['🙏', '❤️', '🙌'].map((emoji) => (
-                                          <button
-                                            key={emoji}
-                                            type="button"
-                                            onClick={() => toggleReaction(msg.id, emoji)}
-                                            className="hover:scale-125 transition-transform text-xs cursor-pointer"
-                                          >
-                                            {emoji}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              <div ref={chatEndRef} />
-                            </div>
-
-                            {/* Chat Input form */}
-                            <form onSubmit={handleSendMessage} className="p-4 border-t border-church-creamDark flex items-center space-x-2 bg-church-bg/10">
-                              {/* Quick emoji popovers */}
-                              <div className="flex items-center space-x-1 border-r border-church-creamDark/60 pr-2">
-                                {['🙏', '❤️', '🙌', '✨'].map((emoji) => (
-                                  <button
-                                    key={emoji}
-                                    type="button"
-                                    onClick={() => addEmoji(emoji)}
-                                    className="hover:scale-125 transition-transform text-sm cursor-pointer"
-                                  >
-                                    {emoji}
-                                  </button>
-                                ))}
-                              </div>
-
-                              <input
-                                type="text"
-                                value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
-                                placeholder={`Message ${activeChannel}...`}
-                                className="flex-grow px-3 py-2 bg-white rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold text-sm text-church-charcoal"
-                              />
-
-                              <button
-                                type="submit"
-                                className="p-2 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood rounded-lg transition-all cursor-pointer"
-                              >
-                                <Send className="w-4 h-4" />
-                              </button>
-                            </form>
-                          </div>
-                        </div>
-                      </div>
+                      <CommunityChat
+                        currentUser={currentUser}
+                        profilesList={profilesList}
+                        chatMessages={chatMessages}
+                        activeChannel={activeChannel}
+                        setActiveChannel={setActiveChannel}
+                        newMessage={newMessage}
+                        setNewMessage={setNewMessage}
+                        chatSearchQuery={chatSearchQuery}
+                        setChatSearchQuery={setChatSearchQuery}
+                        mobileChatView={mobileChatView}
+                        setMobileChatView={setMobileChatView}
+                        handleSendMessage={handleSendMessage}
+                        toggleReaction={toggleReaction}
+                        handleDeleteMessage={handleDeleteMessage}
+                        handleTogglePinMessage={handleTogglePinMessage}
+                        addEmoji={addEmoji}
+                        chatEndRef={chatEndRef}
+                        showToast={showToast}
+                      />
                     )}
 
                     {/* Sub-tab: Announcements & Schedules */}
                     {portalSubTab === 'announcements' && (
-                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                        {/* Announcement Board */}
-                        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-church-creamDark/80 shadow-sm space-y-6">
-                          <div className="flex items-center justify-between border-b border-church-creamDark pb-4">
-                            <h3 className="font-serif text-2xl font-bold text-church-wood flex items-center space-x-2">
-                              <BookOpen className="w-5 h-5 text-church-gold" />
-                              <span>Church Announcements</span>
-                            </h3>
-                            <span className="text-xs uppercase tracking-widest text-church-gold font-bold">Latest Updates</span>
-                          </div>
-
-                          {/* Leader Form to Post Announcement */}
-                          {['Admin', 'Pastor', 'Church Leader'].includes(currentUser.role) && (
-                            <form onSubmit={handleCreateAnnouncement} className="bg-church-creamDark/20 p-4 rounded-xl border border-church-gold/20 space-y-3">
-                              <span className="text-[10px] uppercase font-bold text-church-wood tracking-wider block">Post New Announcement</span>
-                              <div>
-                                <input
-                                  type="text"
-                                  required
-                                  placeholder="Announcement Title"
-                                  value={announcementTitle}
-                                  onChange={(e) => setAnnouncementTitle(e.target.value)}
-                                  className="w-full px-3 py-2 text-xs rounded border border-church-creamDark bg-white focus:outline-none focus:border-church-gold text-church-charcoal"
-                                />
-                              </div>
-                              <div>
-                                <textarea
-                                  required
-                                  rows={2}
-                                  placeholder="Announcement content..."
-                                  value={announcementContent}
-                                  onChange={(e) => setAnnouncementContent(e.target.value)}
-                                  className="w-full px-3 py-2 text-xs rounded border border-church-creamDark bg-white focus:outline-none focus:border-church-gold text-church-charcoal"
-                                />
-                              </div>
-                              <button
-                                type="submit"
-                                className="w-full py-1.5 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded text-xs transition-all shadow cursor-pointer animate-press"
-                              >
-                                Post Announcement
-                              </button>
-                            </form>
-                          )}
-
-                          <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
-                            {announcementsList.length === 0 ? (
-                              <p className="text-xs text-church-charcoal/50 text-center py-4">No active announcements.</p>
-                            ) : (
-                              announcementsList.map((ann) => (
-                                <div key={ann.id} className="p-4 bg-church-creamDark/20 rounded-xl border-l-4 border-church-gold space-y-1.5 relative group">
-                                  <div className="flex items-center justify-between">
-                                    <h4 className="font-bold text-sm text-church-wood">{ann.title}</h4>
-                                    <div className="flex items-center space-x-2">
-                                      <span className="text-[10px] text-church-charcoal/50">
-                                        {new Date(ann.created_at).toLocaleDateString([], { dateStyle: 'medium' })}
-                                      </span>
-                                      {['Admin', 'Pastor', 'Church Leader'].includes(currentUser.role) && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteAnnouncement(ann.id)}
-                                          className="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
-                                          title="Delete Announcement"
-                                        >
-                                          <X className="w-3.5 h-3.5" />
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <p className="text-xs text-church-charcoal/80 whitespace-pre-line">{ann.content}</p>
-                                  <div className="text-[9px] text-church-charcoal/50 text-right font-medium">
-                                    — Posted by {ann.author}
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Ministry Schedule & Calendar */}
-                        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-church-creamDark shadow-sm space-y-6">
-                          <h3 className="font-serif text-2xl font-bold text-church-wood flex items-center space-x-2">
-                            <Calendar className="w-5 h-5 text-church-gold" />
-                            <span>Ministry Schedules</span>
-                          </h3>
-
-                          <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
-                            {activitySchedulesList.length === 0 ? (
-                              <p className="text-xs text-church-charcoal/50 text-center py-4">No scheduled activities.</p>
-                            ) : (
-                              activitySchedulesList.map((sched) => {
-                                const dateObj = new Date(sched.event_date);
-                                const day = dateObj.toLocaleDateString([], { day: '2-digit' });
-                                const month = dateObj.toLocaleDateString([], { month: 'short' });
-                                return (
-                                  <div key={sched.id} className="flex space-x-3 text-sm border-b border-church-creamDark/40 pb-3 last:border-0 last:pb-0">
-                                    <div className="w-10 h-10 bg-church-creamDark/80 rounded-lg flex flex-col items-center justify-center font-bold text-church-wood shrink-0">
-                                      <span className="text-xs leading-none">{day}</span>
-                                      <span className="text-[9px] uppercase tracking-wide">{month}</span>
-                                    </div>
-                                    <div>
-                                      <h4 className="font-bold text-church-wood text-sm">{sched.title}</h4>
-                                      {sched.description && (
-                                        <p className="text-xs text-church-charcoal/70">{sched.description}</p>
-                                      )}
-                                      <span className="text-[10px] text-church-goldDark font-semibold">
-                                        {dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <AnnouncementsPanel
+                        currentUser={currentUser}
+                        announcementsList={announcementsList}
+                        announcementTitle={announcementTitle}
+                        setAnnouncementTitle={setAnnouncementTitle}
+                        announcementContent={announcementContent}
+                        setAnnouncementContent={setAnnouncementContent}
+                        handleCreateAnnouncement={handleCreateAnnouncement}
+                        handleDeleteAnnouncement={handleDeleteAnnouncement}
+                        activitySchedulesList={activitySchedulesList}
+                        systemSettings={systemSettings}
+                        scheduleTitle={scheduleTitle}
+                        setScheduleTitle={setScheduleTitle}
+                        scheduleDescription={scheduleDescription}
+                        setScheduleDescription={setScheduleDescription}
+                        scheduleDate={scheduleDate}
+                        setScheduleDate={setScheduleDate}
+                        handleCreateSchedule={handleCreateSchedule}
+                        handleDeleteSchedule={handleDeleteSchedule}
+                        handlePinEvent={handlePinEvent}
+                      />
                     )}
 
                     {/* Sub-tab: RSVP & Facilitator Dashboard */}
                     {portalSubTab === 'rsvp' && (currentUser.role === 'Admin' || currentUser.role === 'Pastor') && (
-                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-gold shadow-md space-y-6">
-                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
-                          <Shield className="w-6 h-6 text-church-gold" />
-                          <h3 className="font-serif text-2xl font-bold">Facilitator Dashboard</h3>
-                        </div>
-
-                        {/* RSVP Analytics Tally */}
-                        <div className="space-y-4">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Thanksgiving Attendance Tally</h4>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-church-creamDark/40 p-4 rounded-xl text-center">
-                              <span className="text-2xl font-bold text-church-wood block">{totalAdults}</span>
-                              <span className="text-xs text-church-charcoal/60">Total Adults</span>
-                            </div>
-                            <div className="bg-church-creamDark/40 p-4 rounded-xl text-center">
-                              <span className="text-2xl font-bold text-church-wood block">{totalKids}</span>
-                              <span className="text-xs text-church-charcoal/60">Total Children</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Volunteers List sorted by team */}
-                        <div className="space-y-3">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Volunteers By Team</h4>
-                          <div className="max-h-44 overflow-y-auto space-y-2 bg-church-bg p-3 rounded-lg text-xs">
-                            {volunteersList.length === 0 ? (
-                              <p className="text-church-charcoal/50 text-center">No volunteers registered yet.</p>
-                            ) : (
-                              volunteersList.map((v, i) => (
-                                <div key={i} className="flex justify-between items-center border-b border-church-creamDark pb-1.5 last:border-0 last:pb-0">
-                                  <span className="font-semibold text-church-wood">{v.name}</span>
-                                  <span className="bg-church-gold/20 text-church-goldDark px-2 py-0.5 rounded text-[10px] font-bold uppercase">{v.team}</span>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Gratitude Notes Moderation queue */}
-                        <div className="space-y-3">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Gratitude Moderation Queue</h4>
-                          <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
-                            {gratitudeNotes.filter(n => !n.approved).length === 0 ? (
-                              <p className="text-xs text-church-charcoal/50 text-center py-2">No pending gratitude notes.</p>
-                            ) : (
-                              gratitudeNotes.filter(n => !n.approved).map((note) => (
-                                <div key={note.id} className="bg-church-bg p-3 rounded-lg border border-church-creamDark space-y-2 text-xs">
-                                  <div className="flex justify-between items-start">
-                                    <span className="font-bold text-church-wood">{note.author}</span>
-                                    <span className="text-[10px] text-church-charcoal/50">{note.timestamp}</span>
-                                  </div>
-                                  <p className="italic text-church-charcoal/90">"{note.text}"</p>
-                                  <div className="flex space-x-2 justify-end">
-                                    <button
-                                      type="button"
-                                      onClick={() => hideNote(note.id)}
-                                      className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded cursor-pointer"
-                                      title="Reject/Hide"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => approveNote(note.id)}
-                                      className="p-1 bg-green-50 text-green-600 hover:bg-green-100 rounded cursor-pointer"
-                                      title="Approve note"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <RSVPPanel
+                        currentUser={currentUser}
+                        totalAdults={totalAdults}
+                        totalKids={totalKids}
+                        volunteersList={volunteersList}
+                        gratitudeNotes={gratitudeNotes}
+                        approveNote={approveNote}
+                        hideNote={hideNote}
+                      />
                     )}
 
                     {/* Sub-tab: User Approvals */}
                     {portalSubTab === 'users' && currentUser.role === 'Admin' && (
-                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
-                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
-                          <Users className="w-6 h-6 text-church-gold" />
-                          <h3 className="font-serif text-2xl font-bold">User Moderation</h3>
-                        </div>
-
-                        <div className="space-y-4">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Pending Approvals ({profilesList.filter(p => !p.approved).length})</h4>
-                          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                            {profilesList.filter(p => !p.approved).length === 0 ? (
-                              <p className="text-xs text-church-charcoal/50 text-center py-2">No pending user registrations.</p>
-                            ) : (
-                              profilesList.filter(p => !p.approved).map((profile) => (
-                                <div key={profile.id} className="bg-church-bg p-3 rounded-lg border border-church-creamDark space-y-2 text-xs">
-                                  <div className="flex justify-between items-start">
-                                    <div>
-                                      <span className="font-bold text-church-wood block">{profile.name}</span>
-                                      <span className="text-[10px] text-church-charcoal/50 block">Requested: {profile.role}</span>
-                                    </div>
-                                    <div className="flex space-x-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={async () => {
-                                          const { error } = await supabase.from('profiles').delete().eq('id', profile.id);
-                                          if (error) alert(error.message);
-                                          else fetchProfiles();
-                                        }}
-                                        className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded cursor-pointer"
-                                        title="Deny / Delete"
-                                      >
-                                        <X className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={async () => {
-                                          const { error } = await supabase.from('profiles').update({ approved: true }).eq('id', profile.id);
-                                          if (error) alert(error.message);
-                                          else fetchProfiles();
-                                        }}
-                                        className="p-1 bg-green-50 text-green-600 hover:bg-green-100 rounded cursor-pointer"
-                                        title="Approve User"
-                                      >
-                                        <Check className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="space-y-4 pt-2 border-t border-church-creamDark">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">All Approved Members ({profilesList.filter(p => p.approved).length})</h4>
-                          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                            {profilesList.filter(p => p.approved).map((profile) => (
-                              <div key={profile.id} className="flex justify-between items-center text-xs p-2 bg-church-bg/50 rounded-lg">
-                                <div>
-                                  <span className="font-semibold text-church-wood block">{profile.name}</span>
-                                  <span className="text-[10px] text-church-charcoal/50">{profile.role}</span>
-                                </div>
-                                {profile.email !== 'admin@pcgami.org' && (
-                                  <div className="flex space-x-1 items-center">
-                                    <select
-                                      value={profile.role}
-                                      onChange={async (e) => {
-                                        const newRole = e.target.value;
-                                        const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', profile.id);
-                                        if (error) alert(error.message);
-                                        else fetchProfiles();
-                                      }}
-                                      className="px-1.5 py-0.5 border border-church-creamDark rounded text-[10px] bg-white text-church-charcoal focus:outline-none"
-                                    >
-                                      <option value="Admin">Admin</option>
-                                      <option value="Pastor">Pastor</option>
-                                      <option value="Church Leader">Church Leader</option>
-                                      <option value="Youth Leader">Youth Leader</option>
-                                      <option value="Church Member">Church Member</option>
-                                      <option value="Young People">Young People</option>
-                                    </select>
-                                    <button
-                                      type="button"
-                                      onClick={async () => {
-                                        const { error } = await supabase.from('profiles').update({ approved: false }).eq('id', profile.id);
-                                        if (error) alert(error.message);
-                                        else fetchProfiles();
-                                      }}
-                                      className="p-1 text-red-600 hover:bg-red-50 rounded cursor-pointer"
-                                      title="Revoke Access"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
+                      <UsersPanel
+                        currentUser={currentUser}
+                        profilesList={profilesList}
+                        fetchProfiles={fetchProfiles}
+                        showToast={showToast}
+                      />
                     )}
 
-                    {/* Sub-tab: Hero Slideshow Settings */}
-                    {portalSubTab === 'slideshow' && currentUser.role === 'Admin' && (
-                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
-                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
-                          <Upload className="w-6 h-6 text-church-gold" />
-                          <h3 className="font-serif text-2xl font-bold">Hero Slideshow</h3>
-                        </div>
-
-                        {/* Add new slide form */}
-                        <form
-                          onSubmit={async (e) => {
-                            e.preventDefault();
-                            if (!newHeroUrl.trim()) return;
-
-                            const { error } = await supabase.from('hero_photos').insert([
-                              {
-                                url: newHeroUrl,
-                                caption: newHeroCaption,
-                                display_order: newHeroOrder
-                              }
-                            ]);
-
-                            if (error) {
-                              alert(error.message);
-                            } else {
-                              setNewHeroUrl('');
-                              setNewHeroCaption('');
-                              setNewHeroOrder(0);
-                              fetchHeroPhotos();
-                            }
-                          }}
-                          className="space-y-3"
-                        >
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Add New Slide</h4>
-                          <div>
-                            <input
-                              type="text"
-                              required
-                              placeholder="Image URL (e.g. https://images.unsplash.com/...)"
-                              value={newHeroUrl}
-                              onChange={(e) => setNewHeroUrl(e.target.value)}
-                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
-                            />
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <input
-                              type="text"
-                              placeholder="Caption"
-                              value={newHeroCaption}
-                              onChange={(e) => setNewHeroCaption(e.target.value)}
-                              className="col-span-2 px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
-                            />
-                            <input
-                              type="number"
-                              placeholder="Order"
-                              value={newHeroOrder}
-                              onChange={(e) => setNewHeroOrder(parseInt(e.target.value) || 0)}
-                              className="px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
-                            />
-                          </div>
-                          <button
-                            type="submit"
-                            className="w-full py-2 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded text-xs transition-all shadow cursor-pointer"
-                          >
-                            Add Slide Image
-                          </button>
-                        </form>
-
-                        {/* Current slides list */}
-                        <div className="space-y-4 pt-4 border-t border-church-creamDark">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Active Slides ({heroPhotos.length})</h4>
-                          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                            {heroPhotos.length === 0 ? (
-                              <p className="text-xs text-church-charcoal/50 text-center py-2">No custom slideshow images. Falling back to default cover.</p>
-                            ) : (
-                              heroPhotos.map((photo) => (
-                                <div key={photo.id} className="flex items-center space-x-3 p-2 bg-church-bg/50 rounded-lg text-xs">
-                                  <img
-                                    src={photo.url}
-                                    alt={photo.caption || 'Slide'}
-                                    className="w-12 h-12 object-cover rounded border border-church-creamDark"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1515162305285-0293e4767cc2?q=80&w=800';
-                                    }}
-                                  />
-                                  <div className="flex-grow min-w-0">
-                                    <span className="font-semibold text-xs text-church-wood block truncate">{photo.caption || 'No Caption'}</span>
-                                    <span className="text-[10px] text-church-charcoal/50 block">Order: {photo.display_order}</span>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      const { error } = await supabase.from('hero_photos').delete().eq('id', photo.id);
-                                      if (error) alert(error.message);
-                                      else fetchHeroPhotos();
-                                    }}
-                                    className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded cursor-pointer"
-                                    title="Delete Slide"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Sub-tab: Church Schedules Management */}
-                    {portalSubTab === 'schedules' && ['Admin', 'Pastor', 'Church Leader'].includes(currentUser.role) && (
-                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
-                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
-                          <Calendar className="w-6 h-6 text-church-gold" />
-                          <h3 className="font-serif text-2xl font-bold">Church Schedules Manager</h3>
-                        </div>
-
-                        {/* Add new schedule form */}
-                        <form onSubmit={handleCreateSchedule} className="space-y-4">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70">Create New Schedule</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Title</label>
-                              <input
-                                type="text"
-                                required
-                                placeholder="e.g. Youth Fellowship Service"
-                                value={scheduleTitle}
-                                onChange={(e) => setScheduleTitle(e.target.value)}
-                                className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Event Date & Time</label>
-                              <input
-                                type="datetime-local"
-                                required
-                                value={scheduleDate}
-                                onChange={(e) => setScheduleDate(e.target.value)}
-                                className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Description / Notes</label>
-                            <textarea
-                              rows={2}
-                              placeholder="Describe the activity..."
-                              value={scheduleDescription}
-                              onChange={(e) => setScheduleDescription(e.target.value)}
-                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
-                            />
-                          </div>
-                          <button
-                            type="submit"
-                            className="w-full py-2 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded text-xs transition-all shadow cursor-pointer"
-                          >
-                            Add Activity Schedule
-                          </button>
-                        </form>
-
-                        {/* Current schedules list */}
-                        <div className="space-y-4 pt-4 border-t border-church-creamDark">
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-church-charcoal/70 font-bold">Active Activity Schedules ({activitySchedulesList.length})</h4>
-                          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-                            {activitySchedulesList.length === 0 ? (
-                              <p className="text-xs text-church-charcoal/50 text-center py-2">No activities scheduled.</p>
-                            ) : (
-                              activitySchedulesList.map((sched) => {
-                                const dateObj = new Date(sched.event_date);
-                                const isPinned = systemSettings?.pinned_event_id === sched.id;
-                                return (
-                                  <div key={sched.id} className={`flex items-start justify-between p-3 rounded-lg text-xs border transition-all duration-300 ${
-                                    isPinned 
-                                      ? 'bg-church-gold/10 border-church-gold shadow-sm animate-pulseFast' 
-                                      : 'bg-church-bg/50 border-church-creamDark/60'
-                                  }`}>
-                                    <div className="space-y-1">
-                                      <div className="flex items-center space-x-2">
-                                        <span className="font-semibold text-xs text-church-wood block">{sched.title}</span>
-                                        {isPinned && (
-                                          <span className="text-[9px] bg-church-gold text-church-wood font-bold px-1.5 py-0.5 rounded flex items-center space-x-0.5">
-                                            <span>⭐ Pinned Countdown</span>
-                                          </span>
-                                        )}
-                                      </div>
-                                      {sched.description && <p className="text-[10px] text-church-charcoal/70">{sched.description}</p>}
-                                      <span className="inline-block text-[10px] text-church-goldDark bg-church-gold/10 px-2 py-0.5 rounded font-medium">
-                                        {dateObj.toLocaleDateString([], { dateStyle: 'medium' })} at {dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center space-x-2 self-center">
-                                      {currentUser.role === 'Admin' && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handlePinEvent(isPinned ? null : sched.id)}
-                                          className={`p-1 rounded cursor-pointer transition-all duration-200 ${
-                                            isPinned 
-                                              ? 'bg-church-gold text-church-wood hover:bg-church-goldDark' 
-                                              : 'bg-church-creamDark hover:bg-church-gold/20 text-church-charcoal hover:text-church-goldDark'
-                                          }`}
-                                          title={isPinned ? "Unpin from countdown" : "Pin to countdown"}
-                                        >
-                                          ⭐
-                                        </button>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteSchedule(sched.id)}
-                                        className="p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded cursor-pointer"
-                                        title="Delete Schedule"
-                                      >
-                                        <X className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Sub-tab: System Settings (Landing Page Content) */}
+                    {/* Sub-tab: System Settings & Slideshow */}
                     {portalSubTab === 'settings' && currentUser.role === 'Admin' && (
-                      <div className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-church-wood shadow-md space-y-6">
-                        <div className="flex items-center space-x-2 text-church-wood border-b border-church-creamDark pb-4">
-                          <Shield className="w-6 h-6 text-church-gold" />
-                          <h3 className="font-serif text-2xl font-bold">System Settings</h3>
-                        </div>
-
-                        <form onSubmit={handleUpdateSettings} className="space-y-4">
-                          <div>
-                            <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Church Name</label>
-                            <input
-                              type="text"
-                              required
-                              placeholder="e.g. FOJ-PCGAMI Siay"
-                              value={editChurchName}
-                              onChange={(e) => setEditChurchName(e.target.value)}
-                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Banner Title</label>
-                            <input
-                              type="text"
-                              required
-                              placeholder="Landing page main headline"
-                              value={editBannerTitle}
-                              onChange={(e) => setEditBannerTitle(e.target.value)}
-                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs text-church-charcoal/70 font-semibold mb-1">Banner Subtitle / Scripture</label>
-                            <textarea
-                              required
-                              rows={3}
-                              placeholder="Headline description or scripture passage"
-                              value={editBannerSubtitle}
-                              onChange={(e) => setEditBannerSubtitle(e.target.value)}
-                              className="w-full px-3 py-2 text-xs rounded border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-church-charcoal"
-                            />
-                          </div>
-
-
-
-                          <button
-                            type="submit"
-                            className="w-full py-2.5 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded text-xs transition-all shadow cursor-pointer animate-press"
-                          >
-                            Update Settings & Save Changes
-                          </button>
-                        </form>
-                      </div>
+                      <SettingsPanel
+                        currentUser={currentUser}
+                        editChurchName={editChurchName}
+                        setEditChurchName={setEditChurchName}
+                        editBannerTitle={editBannerTitle}
+                        setEditBannerTitle={setEditBannerTitle}
+                        editBannerSubtitle={editBannerSubtitle}
+                        setEditBannerSubtitle={setEditBannerSubtitle}
+                        handleUpdateSettings={handleUpdateSettings}
+                        heroPhotos={heroPhotos}
+                        newHeroUrl={newHeroUrl}
+                        setNewHeroUrl={setNewHeroUrl}
+                        newHeroCaption={newHeroCaption}
+                        setNewHeroCaption={setNewHeroCaption}
+                        newHeroOrder={newHeroOrder}
+                        setNewHeroOrder={setNewHeroOrder}
+                        fetchHeroPhotos={fetchHeroPhotos}
+                        showToast={showToast}
+                      />
                     )}
 
+                    {/* Sub-tab: Profile */}
+                    {portalSubTab === 'profile' && currentUser?.role !== 'Admin' && (
+                      <ProfilePanel currentUser={currentUser} />
+                    )}
                   </div>
                 </div>
               </div>
@@ -2240,125 +1791,22 @@ export default function App() {
       </footer>
 
       {/* ================= MODAL: DIGITAL INVITATION / RSVP ================= */}
-      {showInvitationModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-church-charcoal/80 backdrop-blur-sm animate-fadeIn">
-          <div className="relative bg-church-bg max-w-lg w-full max-h-[calc(100vh-2rem)] rounded-2xl shadow-2xl border border-church-gold overflow-hidden flex flex-col">
-
-            {/* Header / Vibe Banner */}
-            <div className="bg-church-wood p-8 text-center text-white relative flex-shrink-0">
-              <button
-                onClick={() => setShowInvitationModal(false)}
-                className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-full cursor-pointer transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <span className="text-xs uppercase tracking-widest text-church-gold font-bold">Thanksgiving Celebration Invitation</span>
-              <h2 className="font-serif text-3xl font-bold mt-2">Church Thanksgiving Celebration</h2>
-
-              {/* Scripture Intro */}
-              <div className="mt-4 border-t border-church-gold/30 pt-4 max-w-sm mx-auto">
-                <p className="text-xs italic text-church-goldLight leading-relaxed">
-                  "Enter His gates with thanksgiving and His courts with praise; give thanks to Him and praise His name. For the Lord is good..." — Psalm 100:4-5
-                </p>
-              </div>
-            </div>
-
-            {/* RSVP Form Body */}
-            <form onSubmit={handleRSVPSubmit} className="p-6 sm:p-8 space-y-6 overflow-y-auto flex-grow">
-
-              {urlFamilyName && (
-                <div className="p-3 bg-church-gold/10 border border-church-gold/30 rounded-xl text-center text-sm font-semibold text-church-wood flex items-center justify-center space-x-2">
-                  <span>Welcome, {urlFamilyName}! We are blessed to invite you.</span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Name / Family Name</label>
-                <input
-                  type="text"
-                  required
-                  value={rsvpName}
-                  onChange={(e) => setRsvpName(e.target.value)}
-                  placeholder="e.g. The Jenkins Family"
-                  className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-sm"
-                />
-              </div>
-
-              {/* Headcount */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Adults Attendance</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={rsvpAdults}
-                    onChange={(e) => setRsvpAdults(parseInt(e.target.value) || 1)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Children Attendance</label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={rsvpKids}
-                    onChange={(e) => setRsvpKids(parseInt(e.target.value) || 0)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold bg-white text-sm"
-                  />
-                </div>
-              </div>
-
-              {/* Volunteers checkboxes */}
-              <div>
-                <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-2">Volunteer Interest Teams</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  {['Set-up', 'Welcoming', 'Audio-Visual', 'Clean-up'].map((team) => (
-                    <label key={team} className="flex items-start space-x-2.5 p-2.5 bg-white rounded-lg border border-church-creamDark/80 hover:border-church-gold/60 cursor-pointer transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={rsvpVolunteer.includes(team)}
-                        onChange={() => handleVolunteerChange(team)}
-                        className="rounded border-church-creamDark text-church-gold focus:ring-church-gold mt-0.5 shrink-0"
-                      />
-                      <span className="text-church-charcoal leading-snug">{team} Team</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Gratitude note */}
-              <div>
-                <label className="block text-xs uppercase tracking-wider text-church-charcoal/70 font-semibold mb-1">Submit a Gratitude Wall Note</label>
-                <textarea
-                  value={rsvpNote}
-                  onChange={(e) => setRsvpNote(e.target.value)}
-                  placeholder="Share a blessing or simple note of thanksgiving... (will go live on the wall upon moderation approval)"
-                  className="w-full px-4 py-2 rounded-lg border border-church-creamDark focus:outline-none focus:border-church-gold bg-white h-20 text-sm resize-none"
-                />
-              </div>
-
-              <div className="flex space-x-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowInvitationModal(false)}
-                  className="flex-1 py-3 border border-church-creamDark text-church-charcoal font-semibold rounded-lg hover:bg-church-creamDark transition-all cursor-pointer text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-3 bg-church-wood hover:bg-church-gold text-white hover:text-church-wood font-bold rounded-lg shadow-md transition-all duration-300 cursor-pointer text-sm"
-                >
-                  Submit RSVP
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <InvitationModal
+        showInvitationModal={showInvitationModal}
+        setShowInvitationModal={setShowInvitationModal}
+        urlFamilyName={urlFamilyName}
+        rsvpName={rsvpName}
+        setRsvpName={setRsvpName}
+        rsvpAdults={rsvpAdults}
+        setRsvpAdults={setRsvpAdults}
+        rsvpKids={rsvpKids}
+        setRsvpKids={setRsvpKids}
+        rsvpVolunteer={rsvpVolunteer}
+        handleVolunteerChange={handleVolunteerChange}
+        rsvpNote={rsvpNote}
+        setRsvpNote={setRsvpNote}
+        handleRSVPSubmit={handleRSVPSubmit}
+      />
 
       {/* ================= LIGHTBOX MODAL: PHOTO VIEW ================= */}
       {selectedPhoto && (
@@ -2479,8 +1927,8 @@ export default function App() {
                   type="submit"
                   disabled={!uploadPreview || !uploadTitle}
                   className={`flex-1 py-2.5 font-bold rounded-lg text-sm transition-all duration-300 ${uploadPreview && uploadTitle
-                      ? 'bg-church-wood hover:bg-church-gold text-white hover:text-church-wood shadow-md'
-                      : 'bg-church-creamDark text-church-charcoal/40 cursor-not-allowed'
+                    ? 'bg-church-wood hover:bg-church-gold text-white hover:text-church-wood shadow-md'
+                    : 'bg-church-creamDark text-church-charcoal/40 cursor-not-allowed'
                     }`}
                 >
                   Publish Photo
@@ -2490,6 +1938,18 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Toast Container */}
+      <Toast toasts={toasts} removeToast={removeToast} />
+
+      {/* Mobile Bottom Navigation Dock (Instagram Style) */}
+      <MobileBottomDock
+        currentUser={currentUser}
+        activeTab={activeTab}
+        portalSubTab={portalSubTab}
+        setPortalSubTab={setPortalSubTab}
+        onLogout={() => supabase.auth.signOut()}
+      />
 
       {/* Vercel Analytics */}
       <Analytics />
