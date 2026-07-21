@@ -228,21 +228,6 @@ export const CommunityChat: React.FC<CommunityChatProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSimulateAttachment = () => {
-    const sampleImages = [
-      'https://images.unsplash.com/photo-1515162305285-0293e4767cc2?q=80&w=800',
-      'https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=800',
-      'https://images.unsplash.com/photo-1504052434569-70ad58565b90?q=80&w=800'
-    ];
-    const randomUrl = sampleImages[Math.floor(Math.random() * sampleImages.length)];
-    setAttachedMedia({
-      type: 'image',
-      url: randomUrl,
-      fileName: 'Church_Event_Photo.jpg'
-    });
-    showToast('Sample image attached', 'info');
-  };
-
   const startDMWithUser = (user: { id?: string; name: string }) => {
     const dmId = getDmChannelId(user.id, user.name);
     setActiveChannel(dmId);
